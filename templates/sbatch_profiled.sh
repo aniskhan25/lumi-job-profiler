@@ -7,8 +7,8 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --mem=60G
 #SBATCH --time=1:00:00
-#SBATCH --output=/scratch/project_462000131/slurm-%j.out
-#SBATCH --error=/scratch/project_462000131/slurm-%j.err
+#SBATCH --output=/scratch/project_462000131/%u/slurm-%j.out
+#SBATCH --error=/scratch/project_462000131/%u/slurm-%j.err
 #SBATCH -o slurm-%j.out
 #SBATCH -e slurm-%j.err
 
@@ -21,7 +21,7 @@ module load pytorch/2.7
 # Opt-in control
 PROFILE_ENABLE="${LUMI_PROFILE:-1}"
 PROFILE_INTERVAL="${PROFILE_INTERVAL:-2}"
-PROFILE_DIR="${SCRATCH:-/tmp}/lumi-profile/${SLURM_JOB_ID}"
+PROFILE_DIR="/scratch/project_462000131/${USER}/lumi-profile/${SLURM_JOB_ID}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SUMMARIZER="${SCRIPT_DIR}/../scripts/summarize_rocm_smi.py"
 
