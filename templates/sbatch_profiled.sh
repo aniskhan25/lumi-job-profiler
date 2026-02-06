@@ -7,6 +7,8 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --mem=60G
 #SBATCH --time=1:00:00
+#SBATCH --output=/scratch/project_462000131/slurm-%j.out
+#SBATCH --error=/scratch/project_462000131/slurm-%j.err
 #SBATCH -o slurm-%j.out
 #SBATCH -e slurm-%j.err
 
