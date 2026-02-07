@@ -83,7 +83,7 @@ else
 fi
 # --- End job payload ---
 
-if [[ "${PROFILE_ENABLE}" == "1" && -x "${SUMMARIZER}" ]]; then
+if [[ "${PROFILE_ENABLE}" == "1" && -f "${SUMMARIZER}" ]]; then
   python3 "${SUMMARIZER}" "${PROFILE_DIR}" "${PROFILE_DIR}/summary.json" || true
   echo "Profile summary: ${PROFILE_DIR}/summary.json"
 else
