@@ -32,7 +32,9 @@ start_profiler() {
   mkdir -p "${PROFILE_DIR}"
   export PROFILE_DIR PROFILE_INTERVAL
 
-  srun ${PROFILER_SRUN_OPTS} bash -c '
+  # Clear inherited CPU binding vars that can force an invalid mask.
+  env -u SLURM_CPU_BIND -u SLURM_CPU_BIND_LIST -u SLURM_CPU_BIND_MASK -u SLURM_CPU_BIND_TYPE \
+    srun ${PROFILER_SRUN_OPTS} bash -c '
     node=$(hostname)
     out="${PROFILE_DIR}/${node}.log"
     echo "# rocm-smi samples for ${node}" > "${out}"
@@ -65,9 +67,9 @@ fi
 # Replace this with your real application launch.
 DEMO_APP="${SCRIPT_DIR}/../scripts/demo_pytorch_rocm.py"
 if [[ -f "${DEMO_APP}" ]]; then
-  srun --ntasks=1 python3 "${DEMO_APP}" --seconds 60 --size 4096 --dtype fp16
+  srun --cpu-bind=none --ntasks=1 python3 "${DEMO_APP}" --seconds 60 --size 4096 --dtype fp16
 else
-  srun --ntasks=1 ./your_application
+  srun --cpu-bind=none --ntasks=1 ./your_application
 fi
 # --- End job payload ---
 
