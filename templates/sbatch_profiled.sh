@@ -9,8 +9,6 @@
 #SBATCH --time=1:00:00
 #SBATCH --output=/scratch/project_462000131/%u/slurm-%j.out
 #SBATCH --error=/scratch/project_462000131/%u/slurm-%j.err
-#SBATCH -o slurm-%j.out
-#SBATCH -e slurm-%j.err
 
 set -euo pipefail
 
@@ -26,8 +24,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SUMMARIZER="${SCRIPT_DIR}/../scripts/summarize_rocm_smi.py"
 
 # You may need --overlap if your job already consumes all CPUs.
-# Example: export PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --overlap"
-PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 --mpi=none}"
+# Disable CPU binding for the sidecar to avoid cpuset conflicts.
+# Example: export PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap"
+PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap}"
 
 start_profiler() {
   mkdir -p "${PROFILE_DIR}"
