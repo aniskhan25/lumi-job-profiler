@@ -20,8 +20,19 @@ module load pytorch/2.7
 PROFILE_ENABLE="${LUMI_PROFILE:-1}"
 PROFILE_INTERVAL="${PROFILE_INTERVAL:-2}"
 PROFILE_DIR="/scratch/project_462000131/${USER}/lumi-profile/${SLURM_JOB_ID}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SUMMARIZER="${SCRIPT_DIR}/../scripts/summarize_rocm_smi.py"
+
+# Clone repo to compute-node /tmp so srun can see the scripts.
+JOB_TMP="/tmp/${USER}/${SLURM_JOB_ID}"
+REPO_DIR="${JOB_TMP}/lumi-job-profiler"
+export GIT_TERMINAL_PROMPT=0
+
+mkdir -p "${JOB_TMP}"
+if [[ ! -d "${REPO_DIR}/.git" ]]; then
+  git clone --depth 1 https://github.com/aniskhan25/lumi-job-profiler.git "${REPO_DIR}"
+fi
+
+DEMO_APP="${REPO_DIR}/scripts/demo_pytorch_rocm.py"
+SUMMARIZER="${REPO_DIR}/scripts/summarize_rocm_smi.py"
 
 # You may need --overlap if your job already consumes all CPUs.
 # Disable CPU binding for the sidecar to avoid cpuset conflicts.
@@ -65,7 +76,6 @@ fi
 
 # --- Job payload ---
 # Replace this with your real application launch.
-DEMO_APP="${SCRIPT_DIR}/../scripts/demo_pytorch_rocm.py"
 if [[ -f "${DEMO_APP}" ]]; then
   srun --cpu-bind=none --ntasks=1 python3 "${DEMO_APP}" --seconds 60 --size 4096 --dtype fp16
 else
