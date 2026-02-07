@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument("--seconds", type=int, default=30, help="Runtime duration")
     parser.add_argument("--size", type=int, default=4096, help="Matrix size (NxN)")
     parser.add_argument("--dtype", default="fp16", choices=["fp16", "bf16", "fp32"], help="Compute dtype")
-    parser.add_argument("--device", default="cuda", help="Device string (default: cuda)")
+    parser.add_argument("--device", default="cuda:0", help="Device string (default: cuda:0)")
     parser.add_argument("--reserve-mem-gb", type=float, default=0.0, help="Optional GPU memory to reserve")
     parser.add_argument("--warmup", type=int, default=5, help="Warmup iterations")
     parser.add_argument("--log-interval", type=int, default=10, help="Log every N iterations")
@@ -59,7 +59,11 @@ def main():
     dtype = dtype_from_str(args.dtype)
 
     torch.manual_seed(0)
-    torch.cuda.set_device(device)
+    # torch.cuda.set_device expects an index or a device with index.
+    if device.index is None:
+        torch.cuda.set_device(0)
+    else:
+        torch.cuda.set_device(device)
 
     props = torch.cuda.get_device_properties(device)
     print("Device:", props.name)
