@@ -16,11 +16,26 @@ from statistics import mean
 
 NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
 GPU_LINE_RE = re.compile(r"^\s*\d+\b")
+KV_LINE_RE = re.compile(r"^GPU\[(?P<gpu>\d+)\]\s*:\s*(?P<label>.+?)\s*:\s*(?P<value>.+)$")
 
 
 def parse_number(token):
     match = NUM_RE.search(token)
     return float(match.group(0)) if match else None
+
+
+def parse_value_with_units(text):
+    """Parse values like '(400Mhz)' or '400 MHz' into MHz (float)."""
+    match = re.search(r"(\d+(?:\.\d+)?)\s*([A-Za-z]+)?", text)
+    if not match:
+        return None
+    value = float(match.group(1))
+    unit = (match.group(2) or "").lower()
+    if unit in ("mhz", "m"):
+        return value
+    if unit in ("ghz", "g"):
+        return value * 1000.0
+    return value
 
 
 def percentile(values, p):
@@ -64,6 +79,98 @@ def extract_tables(lines):
             i = j
             continue
         i += 1
+
+
+def temperature_key(label):
+    label_lower = label.lower()
+    if "sensor edge" in label_lower:
+        return "temp_edge_c"
+    if "sensor junction" in label_lower:
+        return "temp_junction_c"
+    if "sensor memory" in label_lower:
+        return "temp_memory_c"
+    if "sensor hbm 0" in label_lower:
+        return "temp_hbm0_c"
+    if "sensor hbm 1" in label_lower:
+        return "temp_hbm1_c"
+    if "sensor hbm 2" in label_lower:
+        return "temp_hbm2_c"
+    if "sensor hbm 3" in label_lower:
+        return "temp_hbm3_c"
+    if "temperature" in label_lower:
+        return "temp_c"
+    return None
+
+
+def parse_kv_lines(lines):
+    """Parse key/value style rocm-smi output lines."""
+    metrics = defaultdict(lambda: defaultdict(list))
+
+    for line in lines:
+        match = KV_LINE_RE.match(line.strip())
+        if not match:
+            continue
+
+        gpu_id = match.group("gpu")
+        label = match.group("label").strip()
+        value = match.group("value").strip()
+
+        if label == "GPU use (%)":
+            val = parse_number(value)
+            if val is not None:
+                metrics[gpu_id]["gpu_util_pct"].append(val)
+            continue
+
+        if label == "GPU Memory Allocated (VRAM%)":
+            val = parse_number(value)
+            if val is not None:
+                metrics[gpu_id]["vram_util_pct"].append(val)
+            continue
+
+        if label == "GPU Memory Read/Write Activity (%)":
+            val = parse_number(value)
+            if val is not None:
+                metrics[gpu_id]["mem_rw_activity_pct"].append(val)
+            continue
+
+        if label == "Average Graphics Package Power (W)":
+            val = parse_number(value)
+            if val is not None:
+                metrics[gpu_id]["power_w"].append(val)
+            continue
+
+        if label.startswith("fclk clock level"):
+            val = parse_value_with_units(value)
+            if val is not None:
+                metrics[gpu_id]["fclk_mhz"].append(val)
+            continue
+
+        if label.startswith("mclk clock level"):
+            val = parse_value_with_units(value)
+            if val is not None:
+                metrics[gpu_id]["mclk_mhz"].append(val)
+            continue
+
+        if label.startswith("sclk clock level"):
+            val = parse_value_with_units(value)
+            if val is not None:
+                metrics[gpu_id]["sclk_mhz"].append(val)
+            continue
+
+        if label.startswith("socclk clock level"):
+            val = parse_value_with_units(value)
+            if val is not None:
+                metrics[gpu_id]["socclk_mhz"].append(val)
+            continue
+
+        temp_key = temperature_key(label)
+        if temp_key:
+            val = parse_number(value)
+            if val is not None:
+                metrics[gpu_id][temp_key].append(val)
+            continue
+
+    return metrics
 
 
 def parse_sample(lines):
@@ -121,6 +228,11 @@ def parse_sample(lines):
             val = grab(col_mclk)
             if val is not None:
                 metrics[gpu_id]["mclk_mhz"].append(val)
+
+    kv_metrics = parse_kv_lines(lines)
+    for gpu_id, gpu_metrics in kv_metrics.items():
+        for key, values in gpu_metrics.items():
+            metrics[gpu_id][key].extend(values)
 
     return metrics
 
