@@ -18,17 +18,25 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 
 ## Quick Start (Opt‑In Profiling)
 
-1. Edit job settings in `templates/sbatch_profiled.sh` if needed.
-2. Submit the job:
+1. Clone the repo on shared scratch:
+
+```bash
+cd /scratch/project_462000131/anisrahm
+git clone https://github.com/aniskhan25/lumi-job-profiler.git
+cd lumi-job-profiler
+```
+
+2. Edit job settings in `templates/sbatch_profiled.sh` if needed.
+3. Submit the job from the repo root:
 
 ```bash
 sbatch templates/sbatch_profiled.sh
 ```
 
-3. After the job completes, find logs and summary here:
+4. After the job completes, find logs and summary here:
 
 ```
-$SCRATCH/lumi-profile/$SLURM_JOB_ID/
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/
   <node>.log
   summary.json
 ```
@@ -39,7 +47,7 @@ The profiling sidecar is enabled by default. You can override behavior with:
 
 - `LUMI_PROFILE=0` to disable
 - `PROFILE_INTERVAL=2` to change sampling interval (seconds)
-- `PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --overlap"` to adjust the sidecar launch
+- `PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap"` to adjust the sidecar launch
 
 Example:
 
