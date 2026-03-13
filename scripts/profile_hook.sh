@@ -10,6 +10,8 @@ PROFILE_INTERVAL="${PROFILE_INTERVAL:-2}"
 PROFILE_DIR="${PROFILE_DIR:-/scratch/project_462000131/${_profile_user}/lumi-profile/${_profile_job_id}}"
 PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap}"
 SUMMARIZER="${SUMMARIZER:-${_profile_hook_dir}/summarize_rocm_smi.py}"
+PROFILE_LOG_SCHEMA_VERSION="${PROFILE_LOG_SCHEMA_VERSION:-1}"
+PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks}"
 PROFILE_STARTED=0
 PROFILE_SUMMARIZED=0
 PROFILER_PID=""
@@ -21,7 +23,7 @@ profile_start() {
 
   mkdir -p "${PROFILE_DIR}"
   rm -f "${PROFILE_DIR}/STOP"
-  export PROFILE_DIR PROFILE_INTERVAL
+  export PROFILE_DIR PROFILE_INTERVAL PROFILE_LOG_SCHEMA_VERSION PROFILE_COLLECT_COMMAND
   PROFILE_SUMMARIZED=0
 
   # Clear inherited CPU binding to avoid cpuset conflicts in the sidecar step.
@@ -30,10 +32,12 @@ profile_start() {
     node=$(hostname)
     out="${PROFILE_DIR}/${node}.log"
     echo "# rocm-smi samples for ${node}" > "${out}"
+    echo "# profile_log_schema_version=${PROFILE_LOG_SCHEMA_VERSION}" >> "${out}"
+    echo "# profile_collect_command=${PROFILE_COLLECT_COMMAND}" >> "${out}"
     while [[ ! -f "${PROFILE_DIR}/STOP" ]]; do
       ts=$(date +%s)
       echo "ts=${ts}" >> "${out}"
-      rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks >> "${out}" 2>&1 || true
+      ${PROFILE_COLLECT_COMMAND} >> "${out}" 2>&1 || true
       echo "---" >> "${out}"
       sleep "${PROFILE_INTERVAL}"
     done

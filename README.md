@@ -126,10 +126,17 @@ This captures:
 - GPU temperatures
 - GPU clock frequencies (`fclk`, `mclk`, `sclk`, `socclk`)
 
-The raw samples are written to per-node log files:
+The profiler writes raw samples to per-node log files:
 
 ```text
 /scratch/project_462000131/<username>/lumi-profile/<jobid>/<node>.log
+```
+
+Each raw log includes metadata headers such as:
+
+```text
+# profile_log_schema_version=1
+# profile_collect_command=rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks
 ```
 
 At the end of profiling, these raw samples are summarized into:
@@ -138,19 +145,42 @@ At the end of profiling, these raw samples are summarized into:
 /scratch/project_462000131/<username>/lumi-profile/<jobid>/summary.json
 ```
 
-`summary.json` contains per-node, per-GPU aggregates such as average, p95, and max values for the metrics that were present in the raw `rocm-smi` output.
+`summary.json` contains:
+
+- `collection`: summary schema version, generation time, raw log schema versions, collection command, inferred sampling interval
+- `job`: job metadata derived from the Slurm environment when available
+- `job_metrics`: job-level derived metrics such as average GPU utilization, peak VRAM utilization, and active/effective GPU estimates
+- `nodes`: per-node, per-GPU aggregates such as average, p95, and max values for metrics present in the raw `rocm-smi` output
+- `warnings`: parse warnings or missing-data notices
 
 ## Output Format
 
-`summary.json` contains per-node, per-GPU aggregates (avg, p95, max) for common metrics when present in `rocm-smi` output:
+`summary.json` includes these top-level sections:
+
+- `collection`
+- `job`
+- `job_metrics`
+- `nodes`
+- `warnings`
+
+Under `nodes`, the parser emits per-node, per-GPU aggregates (avg, p95, max) for common metrics when present in `rocm-smi` output:
 
 - GPU utilization
 - VRAM utilization
+- memory read/write activity
 - Power
 - Temperature
 - Core/memory clocks
 
 The parser is best‑effort and tolerant of missing fields.
+
+## Development
+
+Run the parser tests with:
+
+```bash
+python3 -m unittest discover -s tests
+```
 
 ## Limitations (Demo Scope)
 

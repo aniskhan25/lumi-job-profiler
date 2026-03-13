@@ -1,0 +1,67 @@
+# rocm-smi samples for nid005028
+# profile_log_schema_version=1
+# profile_collect_command=rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks
+ts=1770500741
+============================ ROCm System Management Interface ============================
+====================================== Temperature =======================================
+GPU[0]		: Temperature (Sensor edge) (C): 51.0
+GPU[0]		: Temperature (Sensor junction) (C): 63.0
+GPU[0]		: Temperature (Sensor memory) (C): 63.0
+GPU[0]		: Temperature (Sensor HBM 0) (C): 63.0
+GPU[0]		: Temperature (Sensor HBM 1) (C): 59.0
+GPU[0]		: Temperature (Sensor HBM 2) (C): 59.0
+GPU[0]		: Temperature (Sensor HBM 3) (C): 60.0
+==========================================================================================
+=============================== Current clock frequencies ================================
+GPU[0]		: fclk clock level: 0: (400Mhz)
+GPU[0]		: mclk clock level: 3: (1600Mhz)
+GPU[0]		: sclk clock level: 1: (1650Mhz)
+GPU[0]		: socclk clock level: 3: (1090Mhz)
+==========================================================================================
+=================================== Power Consumption ====================================
+GPU[0]		: Average Graphics Package Power (W): 302.0
+==========================================================================================
+=================================== % time GPU is busy ===================================
+GPU[0]		: GPU use (%): 98
+GPU[0]		: GFX Activity: 2946303483
+==========================================================================================
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 1
+GPU[0]		: GPU Memory Read/Write Activity (%): 17
+GPU[0]		: Memory Activity: 2009741005
+GPU[0]		: Avg. Memory Bandwidth: 0
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+---
+ts=1770500743
+============================ ROCm System Management Interface ============================
+====================================== Temperature =======================================
+GPU[0]		: Temperature (Sensor edge) (C): 52.0
+GPU[0]		: Temperature (Sensor junction) (C): 64.0
+GPU[0]		: Temperature (Sensor memory) (C): 64.0
+GPU[0]		: Temperature (Sensor HBM 0) (C): 64.0
+GPU[0]		: Temperature (Sensor HBM 1) (C): 60.0
+GPU[0]		: Temperature (Sensor HBM 2) (C): 60.0
+GPU[0]		: Temperature (Sensor HBM 3) (C): 61.0
+==========================================================================================
+=============================== Current clock frequencies ================================
+GPU[0]		: fclk clock level: 0: (400Mhz)
+GPU[0]		: mclk clock level: 3: (1600Mhz)
+GPU[0]		: sclk clock level: 1: (1700Mhz)
+GPU[0]		: socclk clock level: 3: (1090Mhz)
+==========================================================================================
+=================================== Power Consumption ====================================
+GPU[0]		: Average Graphics Package Power (W): 310.0
+==========================================================================================
+=================================== % time GPU is busy ===================================
+GPU[0]		: GPU use (%): 92
+GPU[0]		: GFX Activity: 2946303490
+==========================================================================================
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 2
+GPU[0]		: GPU Memory Read/Write Activity (%): 19
+GPU[0]		: Memory Activity: 2009741010
+GPU[0]		: Avg. Memory Bandwidth: 0
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+---
