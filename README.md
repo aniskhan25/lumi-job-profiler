@@ -109,6 +109,37 @@ scripts/demo_pytorch_rocm.py --seconds 60 --size 4096 --dtype fp16
 
 If the demo script is missing, the template falls back to `./your_application`.
 
+## What Gets Profiled
+
+The profiler samples `rocm-smi` during the profiled section of the job with:
+
+```bash
+rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks
+```
+
+This captures:
+
+- GPU utilization
+- GPU memory allocation (VRAM%)
+- GPU memory read/write activity
+- GPU package power
+- GPU temperatures
+- GPU clock frequencies (`fclk`, `mclk`, `sclk`, `socclk`)
+
+The raw samples are written to per-node log files:
+
+```text
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/<node>.log
+```
+
+At the end of profiling, these raw samples are summarized into:
+
+```text
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/summary.json
+```
+
+`summary.json` contains per-node, per-GPU aggregates such as average, p95, and max values for the metrics that were present in the raw `rocm-smi` output.
+
 ## Output Format
 
 `summary.json` contains per-node, per-GPU aggregates (avg, p95, max) for common metrics when present in `rocm-smi` output:
