@@ -7,6 +7,7 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 - `scripts/profile_hook.sh`: shell helper for minimal opt-in profiling in existing jobs
 - `templates/sbatch_profiled.sh`: example Slurm job using the profiling helper
 - `scripts/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
+- `scripts/analyze_summary.py`: rule-based analyzer that generates `analysis.json`
 - `scripts/demo_pytorch_rocm.py`: a PyTorch ROCm demo workload to generate GPU activity
 - `implementation_plan.md`: system-level plan for a full feedback loop
 
@@ -51,6 +52,7 @@ sbatch your_job.sh
 /scratch/project_462000131/<username>/lumi-profile/<jobid>/
   <node>.log
   summary.json
+  analysis.json
 ```
 
 ## Example Template
@@ -145,6 +147,12 @@ At the end of profiling, these raw samples are summarized into:
 /scratch/project_462000131/<username>/lumi-profile/<jobid>/summary.json
 ```
 
+The profiler also writes a rule-based analysis artifact:
+
+```text
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/analysis.json
+```
+
 `summary.json` contains:
 
 - `collection`: summary schema version, generation time, raw log schema versions, collection command, inferred sampling interval
@@ -173,6 +181,13 @@ Under `nodes`, the parser emits per-node, per-GPU aggregates (avg, p95, max) for
 - Core/memory clocks
 
 The parser is best‑effort and tolerant of missing fields.
+
+`analysis.json` includes:
+
+- `efficiency`: efficiency class and the utilization score used to classify the job
+- `root_causes`: rule-based findings such as overscaling, parallelism mismatch, or likely stalls
+- `recommendations`: deduplicated advisory actions derived from the findings
+- `job`: copied job metadata from `summary.json`
 
 ## Development
 
