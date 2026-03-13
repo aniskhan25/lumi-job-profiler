@@ -57,6 +57,30 @@ sbatch your_job.sh
 
 If you want a complete working example, use [templates/sbatch_profiled.sh](/Users/anisrahm/Documents/lumi-job-profiler/templates/sbatch_profiled.sh).
 
+## Manual Lifecycle Control
+
+If your job has multiple phases and you only want to profile part of it, use the lifecycle functions directly:
+
+```bash
+source /scratch/project_462000131/anisrahm/lumi-job-profiler/scripts/profile_hook.sh
+trap profile_cleanup EXIT
+
+setup_step
+profile_start
+srun python3 train.py
+profile_stop
+postprocess_step
+profile_summarize
+```
+
+Available functions:
+
+- `profile_start`: launch the profiling sidecar
+- `profile_stop`: stop sampling and wait for the sidecar
+- `profile_summarize`: write `summary.json`
+- `profile_cleanup`: run `profile_stop` and `profile_summarize` safely
+- `profile_run -- <command>`: convenience wrapper for single-command jobs
+
 ## Controls
 
 The helper is enabled by default. You can override behavior with:

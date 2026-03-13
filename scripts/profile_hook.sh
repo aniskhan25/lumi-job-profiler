@@ -11,6 +11,7 @@ PROFILE_DIR="${PROFILE_DIR:-/scratch/project_462000131/${_profile_user}/lumi-pro
 PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap}"
 SUMMARIZER="${SUMMARIZER:-${_profile_hook_dir}/summarize_rocm_smi.py}"
 PROFILE_STARTED=0
+PROFILE_SUMMARIZED=0
 PROFILER_PID=""
 
 profile_start() {
@@ -21,6 +22,7 @@ profile_start() {
   mkdir -p "${PROFILE_DIR}"
   rm -f "${PROFILE_DIR}/STOP"
   export PROFILE_DIR PROFILE_INTERVAL
+  PROFILE_SUMMARIZED=0
 
   # Clear inherited CPU binding to avoid cpuset conflicts in the sidecar step.
   env -u SLURM_CPU_BIND -u SLURM_CPU_BIND_LIST -u SLURM_CPU_BIND_MASK -u SLURM_CPU_BIND_TYPE \
@@ -54,12 +56,22 @@ profile_stop() {
 }
 
 profile_summarize() {
-  if [[ "${PROFILE_ENABLE}" != "1" || ! -f "${SUMMARIZER}" ]]; then
+  if [[ "${PROFILE_ENABLE}" != "1" || "${PROFILE_SUMMARIZED}" == "1" || ! -f "${SUMMARIZER}" ]]; then
+    return 0
+  fi
+
+  if [[ ! -d "${PROFILE_DIR}" ]]; then
     return 0
   fi
 
   python3 "${SUMMARIZER}" "${PROFILE_DIR}" "${PROFILE_DIR}/summary.json" || true
+  PROFILE_SUMMARIZED=1
   echo "Profile summary: ${PROFILE_DIR}/summary.json"
+}
+
+profile_cleanup() {
+  profile_stop
+  profile_summarize
 }
 
 profile_run() {
