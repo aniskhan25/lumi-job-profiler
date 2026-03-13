@@ -8,6 +8,7 @@ _profile_job_id="${SLURM_JOB_ID:-manual}"
 PROFILE_ENABLE="${LUMI_PROFILE:-1}"
 PROFILE_INTERVAL="${PROFILE_INTERVAL:-2}"
 PROFILE_DIR="${PROFILE_DIR:-/scratch/project_462000131/${_profile_user}/lumi-profile/${_profile_job_id}}"
+PROFILE_COLLECT_CPU="${PROFILE_COLLECT_CPU:-0}"
 PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap}"
 SUMMARIZER="${SUMMARIZER:-${_profile_hook_dir}/summarize_rocm_smi.py}"
 ANALYZER="${ANALYZER:-${_profile_hook_dir}/analyze_summary.py}"
@@ -27,7 +28,7 @@ profile_start() {
 
   mkdir -p "${PROFILE_DIR}"
   rm -f "${PROFILE_DIR}/STOP"
-  export PROFILE_DIR PROFILE_INTERVAL PROFILE_LOG_SCHEMA_VERSION PROFILE_COLLECT_COMMAND
+  export PROFILE_DIR PROFILE_INTERVAL PROFILE_LOG_SCHEMA_VERSION PROFILE_COLLECT_COMMAND PROFILE_COLLECT_CPU
   PROFILE_SUMMARIZED=0
   PROFILE_ANALYZED=0
   PROFILE_REPORTED=0
@@ -40,10 +41,17 @@ profile_start() {
     echo "# rocm-smi samples for ${node}" > "${out}"
     echo "# profile_log_schema_version=${PROFILE_LOG_SCHEMA_VERSION}" >> "${out}"
     echo "# profile_collect_command=${PROFILE_COLLECT_COMMAND}" >> "${out}"
+    echo "# profile_collect_cpu=${PROFILE_COLLECT_CPU}" >> "${out}"
     while [[ ! -f "${PROFILE_DIR}/STOP" ]]; do
       ts=$(date +%s)
       echo "ts=${ts}" >> "${out}"
       ${PROFILE_COLLECT_COMMAND} >> "${out}" 2>&1 || true
+      if [[ "${PROFILE_COLLECT_CPU}" == "1" ]]; then
+        cpu_fields=$(awk '"'"'/^cpu / {total=0; for (i=2; i<=9; i++) total+=$i; printf "user=%s nice=%s system=%s idle=%s iowait=%s irq=%s softirq=%s steal=%s total=%s", $2, $3, $4, $5, $6, $7, $8, $9, total; exit}'"'"' /proc/stat)
+        mem_fields=$(awk '"'"'/MemTotal:/ {t=$2} /MemAvailable:/ {a=$2} END {printf " mem_total_kb=%s mem_available_kb=%s", t, a}'"'"' /proc/meminfo)
+        load_fields=$(awk '"'"'{printf " load1=%s load5=%s load15=%s", $1, $2, $3}'"'"' /proc/loadavg)
+        echo "CPU_STAT ${cpu_fields}${mem_fields}${load_fields}" >> "${out}"
+      fi
       echo "---" >> "${out}"
       sleep "${PROFILE_INTERVAL}"
     done

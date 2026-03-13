@@ -10,6 +10,7 @@ import unittest
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 MODULE_PATH = REPO_ROOT / "scripts" / "summarize_rocm_smi.py"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005028.log"
+CPU_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005029_cpu.log"
 
 
 def load_module():
@@ -70,6 +71,25 @@ class SummarizeRocmSmiTests(unittest.TestCase):
     def test_collection_sampling_interval_is_averaged(self):
         summary = self.module.summarize_logs(self.temp_dir)
         self.assertTrue(math.isclose(summary["collection"]["sampling_interval_seconds"], 2.0))
+
+    def test_optional_cpu_metrics_are_parsed_and_aggregated(self):
+        shutil.copy(CPU_FIXTURE_PATH, pathlib.Path(self.temp_dir) / "nid005029.log")
+
+        summary = self.module.summarize_logs(self.temp_dir)
+
+        self.assertTrue(summary["collection"]["collect_cpu_metrics"])
+        node = summary["nodes"]["nid005029"]
+        self.assertEqual(node["metadata"]["profile_collect_cpu"], "1")
+        self.assertIn("cpu", node)
+        self.assertAlmostEqual(node["cpu"]["cpu_util_pct"]["avg"], 75.0)
+        self.assertAlmostEqual(node["cpu"]["cpu_iowait_pct"]["avg"], 5.0)
+        self.assertAlmostEqual(node["cpu"]["memory_used_pct"]["max"], 65.0)
+        self.assertAlmostEqual(node["cpu"]["load1"]["avg"], 4.5)
+
+        self.assertAlmostEqual(summary["job_metrics"]["avg_cpu_util_pct"], 75.0)
+        self.assertAlmostEqual(summary["job_metrics"]["avg_cpu_iowait_pct"], 5.0)
+        self.assertAlmostEqual(summary["job_metrics"]["peak_memory_used_pct"], 65.0)
+        self.assertAlmostEqual(summary["job_metrics"]["avg_load1"], 4.5)
 
 
 if __name__ == "__main__":

@@ -108,6 +108,10 @@ def build_markdown(summary, analysis):
         f"- User: {job.get('user') or 'n/a'}",
         f"- Project: {job.get('project_id') or 'n/a'}",
         f"- Partition: {job.get('partition') or 'n/a'}",
+        f"- Tasks: {job.get('ntasks') or 'n/a'}",
+        f"- CPUs per task: {job.get('cpus_per_task') or 'n/a'}",
+        f"- GPUs requested: {job.get('gpus_requested') or 'n/a'}",
+        f"- GPUs per node: {job.get('gpus_per_node') or 'n/a'}",
         f"- Generated: {analysis.get('generated_at') or 'n/a'}",
         "",
         "## Efficiency",
@@ -122,6 +126,10 @@ def build_markdown(summary, analysis):
         f"- Peak VRAM utilization: {fmt_pct(job_metrics.get('peak_vram_util_pct'))}",
         f"- Total observed GPU slots: {fmt_num(job_metrics.get('total_gpu_slots_observed'))}",
         f"- Active GPU estimate: {fmt_num(job_metrics.get('total_active_gpus_estimate'))}",
+        f"- Average CPU utilization: {fmt_pct(job_metrics.get('avg_cpu_util_pct'))}",
+        f"- Average CPU iowait: {fmt_pct(job_metrics.get('avg_cpu_iowait_pct'))}",
+        f"- Peak memory used: {fmt_pct(job_metrics.get('peak_memory_used_pct'))}",
+        f"- Average load1: {fmt_num(job_metrics.get('avg_load1'))}",
         "",
         "## GPU Overview",
         "",
@@ -224,11 +232,15 @@ def render_html(summary, analysis):
 </head>
 <body>
   <h1>LUMI Job Profiling Report</h1>
-  <div class="panel">
+    <div class="panel">
     <strong>Job ID:</strong> {html.escape(str(job.get('job_id') or 'n/a'))}<br>
     <strong>User:</strong> {html.escape(str(job.get('user') or 'n/a'))}<br>
     <strong>Project:</strong> {html.escape(str(job.get('project_id') or 'n/a'))}<br>
     <strong>Partition:</strong> {html.escape(str(job.get('partition') or 'n/a'))}<br>
+    <strong>Tasks:</strong> {html.escape(str(job.get('ntasks') or 'n/a'))}<br>
+    <strong>CPUs per task:</strong> {html.escape(str(job.get('cpus_per_task') or 'n/a'))}<br>
+    <strong>GPUs requested:</strong> {html.escape(str(job.get('gpus_requested') or 'n/a'))}<br>
+    <strong>GPUs per node:</strong> {html.escape(str(job.get('gpus_per_node') or 'n/a'))}<br>
     <strong>Generated:</strong> {html.escape(str(analysis.get('generated_at') or 'n/a'))}
   </div>
   <h2>Efficiency</h2>
@@ -243,6 +255,10 @@ def render_html(summary, analysis):
     <li><strong>Peak VRAM utilization:</strong> {html.escape(fmt_pct(job_metrics.get('peak_vram_util_pct')))}</li>
     <li><strong>Total observed GPU slots:</strong> {html.escape(fmt_num(job_metrics.get('total_gpu_slots_observed')))}</li>
     <li><strong>Active GPU estimate:</strong> {html.escape(fmt_num(job_metrics.get('total_active_gpus_estimate')))}</li>
+    <li><strong>Average CPU utilization:</strong> {html.escape(fmt_pct(job_metrics.get('avg_cpu_util_pct')))}</li>
+    <li><strong>Average CPU iowait:</strong> {html.escape(fmt_pct(job_metrics.get('avg_cpu_iowait_pct')))}</li>
+    <li><strong>Peak memory used:</strong> {html.escape(fmt_pct(job_metrics.get('peak_memory_used_pct')))}</li>
+    <li><strong>Average load1:</strong> {html.escape(fmt_num(job_metrics.get('avg_load1')))}</li>
   </ul>
   <h2>GPU Overview</h2>
   <table>

@@ -13,6 +13,7 @@ from statistics import mean
 SUMMARY_SCHEMA_VERSION = 1
 DEFAULT_ACTIVE_GPU_THRESHOLD_PCT = 10.0
 HEADER_PREFIX = "# "
+CPU_STAT_PREFIX = "CPU_STAT "
 NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
 GPU_LINE_RE = re.compile(r"^\s*\d+\b")
 KV_LINE_RE = re.compile(r"^GPU\[(?P<gpu>\d+)\]\s*:\s*(?P<label>.+?)\s*:\s*(?P<value>.+)$")
@@ -74,6 +75,16 @@ def parse_header_metadata(lines):
         key, value = payload.split("=", 1)
         metadata[key.strip()] = value.strip()
     return metadata
+
+
+def parse_key_value_payload(payload):
+    values = {}
+    for token in payload.split():
+        if "=" not in token:
+            continue
+        key, value = token.split("=", 1)
+        values[key] = parse_number(value)
+    return values
 
 
 def extract_tables(lines):
@@ -265,6 +276,51 @@ def summarize_metric(values):
     }
 
 
+def parse_cpu_sample(lines):
+    for line in lines:
+        if line.startswith(CPU_STAT_PREFIX):
+            return parse_key_value_payload(line[len(CPU_STAT_PREFIX):])
+    return None
+
+
+def summarize_cpu_samples(cpu_samples):
+    if len(cpu_samples) < 2:
+        return None
+
+    aggregates = defaultdict(list)
+    previous = cpu_samples[0]
+    for current in cpu_samples[1:]:
+        delta_total = current.get("total", 0) - previous.get("total", 0)
+        if delta_total > 0:
+            delta_idle = current.get("idle", 0) - previous.get("idle", 0)
+            delta_iowait = current.get("iowait", 0) - previous.get("iowait", 0)
+            busy = max(delta_total - delta_idle - delta_iowait, 0)
+            aggregates["cpu_util_pct"].append((busy / delta_total) * 100.0)
+            aggregates["cpu_idle_pct"].append((delta_idle / delta_total) * 100.0)
+            aggregates["cpu_iowait_pct"].append((delta_iowait / delta_total) * 100.0)
+
+        mem_total = current.get("mem_total_kb")
+        mem_available = current.get("mem_available_kb")
+        if mem_total and mem_available is not None and mem_total > 0:
+            mem_used_pct = ((mem_total - mem_available) / mem_total) * 100.0
+            aggregates["memory_used_pct"].append(mem_used_pct)
+
+        for key in ("load1", "load5", "load15"):
+            value = current.get(key)
+            if value is not None:
+                aggregates[key].append(value)
+
+        previous = current
+
+    if not aggregates:
+        return None
+
+    return {
+        key: summarize_metric(values)
+        for key, values in aggregates.items()
+    }
+
+
 def infer_interval_seconds(timestamps):
     if len(timestamps) < 2:
         return None
@@ -289,6 +345,9 @@ def build_job_metadata(log_dir):
         "ntasks": os.environ.get("SLURM_NTASKS"),
         "tasks_per_node": os.environ.get("SLURM_TASKS_PER_NODE"),
         "cpus_per_task": os.environ.get("SLURM_CPUS_PER_TASK"),
+        "gpus_requested": os.environ.get("SLURM_GPUS") or os.environ.get("SLURM_JOB_GPUS"),
+        "gpus_per_node": os.environ.get("SLURM_GPUS_PER_NODE"),
+        "gres": os.environ.get("SLURM_GRES"),
         "submit_dir": os.environ.get("SLURM_SUBMIT_DIR"),
         "log_dir": os.path.abspath(log_dir),
     }
@@ -320,6 +379,9 @@ def build_collection_metadata(log_dir, node_headers, node_stats):
         "log_dir": os.path.abspath(log_dir),
         "raw_log_schema_versions": schema_versions,
         "collect_commands": commands,
+        "collect_cpu_metrics": any(
+            header.get("profile_collect_cpu") == "1" for header in node_headers.values()
+        ),
         "sampling_interval_seconds": mean(intervals) if intervals else None,
     }
 
@@ -330,6 +392,10 @@ def compute_job_metrics(summary, active_gpu_threshold_pct=DEFAULT_ACTIVE_GPU_THR
     active_gpu_estimates = []
     total_gpu_slots = 0
     nodes_with_metrics = 0
+    cpu_utils = []
+    cpu_iowait = []
+    memory_used = []
+    load1_values = []
 
     for node_stats in summary["nodes"].values():
         if not node_stats["gpus"]:
@@ -351,6 +417,20 @@ def compute_job_metrics(summary, active_gpu_threshold_pct=DEFAULT_ACTIVE_GPU_THR
 
         active_gpu_estimates.append(node_active)
 
+        cpu_stats = node_stats.get("cpu", {})
+        cpu_util_stats = cpu_stats.get("cpu_util_pct")
+        if cpu_util_stats and cpu_util_stats.get("avg") is not None:
+            cpu_utils.append(cpu_util_stats["avg"])
+        cpu_iowait_stats = cpu_stats.get("cpu_iowait_pct")
+        if cpu_iowait_stats and cpu_iowait_stats.get("avg") is not None:
+            cpu_iowait.append(cpu_iowait_stats["avg"])
+        memory_used_stats = cpu_stats.get("memory_used_pct")
+        if memory_used_stats and memory_used_stats.get("max") is not None:
+            memory_used.append(memory_used_stats["max"])
+        load1_stats = cpu_stats.get("load1")
+        if load1_stats and load1_stats.get("avg") is not None:
+            load1_values.append(load1_stats["avg"])
+
     avg_gpu_util = mean(gpu_utils) if gpu_utils else None
     peak_vram_util = max(vram_utils) if vram_utils else None
     total_active_gpus = sum(active_gpu_estimates)
@@ -363,6 +443,10 @@ def compute_job_metrics(summary, active_gpu_threshold_pct=DEFAULT_ACTIVE_GPU_THR
         "effective_gpus_estimate": total_active_gpus,
         "avg_gpu_util_pct": avg_gpu_util,
         "peak_vram_util_pct": peak_vram_util,
+        "avg_cpu_util_pct": mean(cpu_utils) if cpu_utils else None,
+        "avg_cpu_iowait_pct": mean(cpu_iowait) if cpu_iowait else None,
+        "peak_memory_used_pct": max(memory_used) if memory_used else None,
+        "avg_load1": mean(load1_values) if load1_values else None,
     }
 
 
@@ -386,6 +470,7 @@ def summarize_logs(log_dir):
         header_metadata = parse_header_metadata(lines)
         timestamps = []
         sample_blocks = []
+        cpu_samples = []
         current = []
         seen_timestamp = False
         for line in lines:
@@ -424,6 +509,9 @@ def summarize_logs(log_dir):
         combined = defaultdict(lambda: defaultdict(list))
         for block in sample_blocks:
             metrics = parse_sample(block)
+            cpu_sample = parse_cpu_sample(block)
+            if cpu_sample:
+                cpu_samples.append(cpu_sample)
             for gpu_id, gpu_metrics in metrics.items():
                 for key, values in gpu_metrics.items():
                     combined[gpu_id][key].extend(values)
@@ -436,6 +524,10 @@ def summarize_logs(log_dir):
                 key: summarize_metric(values)
                 for key, values in gpu_metrics.items()
             }
+
+        cpu_summary = summarize_cpu_samples(cpu_samples)
+        if cpu_summary:
+            node_stats["cpu"] = cpu_summary
 
         summary["nodes"][node] = node_stats
         node_headers[node] = header_metadata

@@ -43,7 +43,7 @@ class AnalyzeSummaryTests(unittest.TestCase):
     def test_low_utilization_summary_triggers_overscaling_and_parallelism_rules(self):
         summary = {
             "collection": {"summary_schema_version": 1},
-            "job": {"job_id": "12345"},
+            "job": {"job_id": "12345", "ntasks": "1"},
             "job_metrics": {
                 "avg_gpu_util_pct": 18.0,
                 "peak_vram_util_pct": 6.0,
@@ -86,6 +86,37 @@ class AnalyzeSummaryTests(unittest.TestCase):
         self.assertIn("right_size_gpus", recommendation_types)
         self.assertIn("align_ranks_and_gpus", recommendation_types)
         self.assertIn("investigate_stalls", recommendation_types)
+
+    def test_cpu_heavy_summary_triggers_cpu_bottleneck(self):
+        summary = {
+            "collection": {"summary_schema_version": 1},
+            "job": {"job_id": "12346", "ntasks": "4", "cpus_per_task": "8"},
+            "job_metrics": {
+                "avg_gpu_util_pct": 24.0,
+                "peak_vram_util_pct": 12.0,
+                "total_gpu_slots_observed": 4,
+                "total_active_gpus_estimate": 4,
+                "avg_cpu_util_pct": 82.0,
+                "avg_cpu_iowait_pct": 6.0,
+            },
+            "nodes": {
+                "nid002": {
+                    "gpus": {
+                        "0": {"gpu_util_pct": {"avg": 24.0, "p95": 44.0, "max": 52.0}},
+                        "1": {"gpu_util_pct": {"avg": 26.0, "p95": 46.0, "max": 55.0}},
+                        "2": {"gpu_util_pct": {"avg": 22.0, "p95": 41.0, "max": 48.0}},
+                        "3": {"gpu_util_pct": {"avg": 24.0, "p95": 43.0, "max": 50.0}},
+                    }
+                }
+            },
+        }
+
+        analysis = self.analyzer.analyze_summary(summary)
+
+        causes = {item["cause"] for item in analysis["root_causes"]}
+        self.assertIn("cpu_bottleneck", causes)
+        recommendation_types = {item["type"] for item in analysis["recommendations"]}
+        self.assertIn("inspect_cpu_pipeline", recommendation_types)
 
 
 if __name__ == "__main__":

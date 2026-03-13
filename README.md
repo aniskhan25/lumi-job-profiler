@@ -95,6 +95,7 @@ The helper is enabled by default. You can override behavior with:
 
 - `LUMI_PROFILE=0` to disable
 - `PROFILE_INTERVAL=2` to change sampling interval (seconds)
+- `PROFILE_COLLECT_CPU=1` to collect optional host CPU, memory, and load metrics
 - `PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap"` to adjust the sidecar launch
 - `PROFILE_DIR=/scratch/project_462000131/$USER/lumi-profile/$SLURM_JOB_ID` to override the output directory
 
@@ -130,6 +131,20 @@ This captures:
 - GPU package power
 - GPU temperatures
 - GPU clock frequencies (`fclk`, `mclk`, `sclk`, `socclk`)
+
+If `PROFILE_COLLECT_CPU=1` is set, the profiler also captures lightweight host metrics:
+
+- CPU utilization
+- CPU iowait
+- memory used percentage
+- load averages
+
+`summary.json` also records available Slurm job-structure metadata such as:
+
+- `ntasks`
+- `cpus_per_task`
+- `gpus_requested`
+- `gpus_per_node`
 
 The profiler writes raw samples to per-node log files:
 
@@ -190,12 +205,20 @@ Under `nodes`, the parser emits per-node, per-GPU aggregates (avg, p95, max) for
 - Temperature
 - Core/memory clocks
 
+When CPU collection is enabled, node summaries may also include:
+
+- CPU utilization
+- CPU idle percentage
+- CPU iowait percentage
+- memory used percentage
+- `load1`, `load5`, `load15`
+
 The parser is best‑effort and tolerant of missing fields.
 
 `analysis.json` includes:
 
 - `efficiency`: efficiency class and the utilization score used to classify the job
-- `root_causes`: rule-based findings such as overscaling, parallelism mismatch, or likely stalls
+- `root_causes`: rule-based findings such as overscaling, parallelism mismatch, CPU bottlenecks, or likely stalls
 - `recommendations`: deduplicated advisory actions derived from the findings
 - `job`: copied job metadata from `summary.json`
 

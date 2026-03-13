@@ -67,6 +67,7 @@ def collect_gpu_util_details(summary):
 
 def infer_root_causes(summary):
     job_metrics = summary.get("job_metrics", {})
+    job = summary.get("job", {})
     gpu_details = collect_gpu_util_details(summary)
     findings = []
 
@@ -74,6 +75,8 @@ def infer_root_causes(summary):
     peak_vram = job_metrics.get("peak_vram_util_pct")
     total_gpu_slots = job_metrics.get("total_gpu_slots_observed") or 0
     active_gpus = job_metrics.get("total_active_gpus_estimate") or 0
+    avg_cpu_util = job_metrics.get("avg_cpu_util_pct")
+    avg_cpu_iowait = job_metrics.get("avg_cpu_iowait_pct")
 
     if avg_gpu_util is None:
         return findings
@@ -97,18 +100,41 @@ def infer_root_causes(summary):
         )
 
     if avg_gpu_util < 40.0 and total_gpu_slots > 0 and active_gpus < total_gpu_slots:
+        ntasks = job.get("ntasks")
+        ntasks_text = f" Slurm reported ntasks={ntasks}." if ntasks is not None else ""
         findings.append(
             {
                 "cause": "parallelism_mismatch",
                 "confidence": 0.8,
                 "evidence": (
                     f"Only {active_gpus} of {total_gpu_slots} observed GPUs exceeded the active threshold "
-                    f"while average utilization was {avg_gpu_util:.1f}%."
+                    f"while average utilization was {avg_gpu_util:.1f}%.{ntasks_text}"
                 ),
                 "recommendation": {
                     "type": "align_ranks_and_gpus",
                     "recommended_gpus": max(active_gpus, 1),
                     "reason": "Match the requested GPU count to the number of GPUs doing sustained work.",
+                },
+                }
+            )
+
+    if avg_gpu_util < 40.0 and avg_cpu_util is not None and avg_cpu_util >= 70.0:
+        findings.append(
+            {
+                "cause": "cpu_bottleneck",
+                "confidence": 0.75,
+                "evidence": (
+                    f"Average GPU utilization is {avg_gpu_util:.1f}% while average CPU utilization is "
+                    f"{avg_cpu_util:.1f}%"
+                    + (
+                        f" and average CPU iowait is {avg_cpu_iowait:.1f}%."
+                        if avg_cpu_iowait is not None
+                        else "."
+                    )
+                ),
+                "recommendation": {
+                    "type": "inspect_cpu_pipeline",
+                    "reason": "Inspect data loading, preprocessing, thread placement, or other host-side bottlenecks.",
                 },
             }
         )
