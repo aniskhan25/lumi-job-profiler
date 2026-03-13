@@ -4,7 +4,8 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 
 ## What’s Included
 
-- `templates/sbatch_profiled.sh`: opt-in Slurm job template with profiling sidecar
+- `scripts/profile_hook.sh`: shell helper for minimal opt-in profiling in existing jobs
+- `templates/sbatch_profiled.sh`: example Slurm job using the profiling helper
 - `scripts/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
 - `scripts/demo_pytorch_rocm.py`: a PyTorch ROCm demo workload to generate GPU activity
 - `implementation_plan.md`: system-level plan for a full feedback loop
@@ -16,7 +17,7 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 - ROCm installed on compute nodes (`rocm-smi` available)
 - PyTorch module on LUMI (template uses `pytorch/2.7`)
 
-## Quick Start (Opt‑In Profiling)
+## Quick Start (Existing Job)
 
 1. Clone the repo on shared scratch:
 
@@ -26,14 +27,25 @@ git clone https://github.com/aniskhan25/lumi-job-profiler.git
 cd lumi-job-profiler
 ```
 
-2. Edit job settings in `templates/sbatch_profiled.sh` if needed.
-3. Submit the job from the repo root:
+2. In your existing `sbatch` script, add the hook after your module loads:
 
 ```bash
-sbatch templates/sbatch_profiled.sh
+source /scratch/project_462000131/anisrahm/lumi-job-profiler/scripts/profile_hook.sh
 ```
 
-4. After the job completes, find logs and summary here:
+3. Wrap your current launch command:
+
+```bash
+profile_run -- srun python3 myprog.py <options>
+```
+
+4. Submit the job as usual:
+
+```bash
+sbatch your_job.sh
+```
+
+5. After the job completes, find logs and summary here:
 
 ```
 /scratch/project_462000131/<username>/lumi-profile/<jobid>/
@@ -41,23 +53,28 @@ sbatch templates/sbatch_profiled.sh
   summary.json
 ```
 
-## Opt‑In Controls
+## Example Template
 
-The profiling sidecar is enabled by default. You can override behavior with:
+If you want a complete working example, use [templates/sbatch_profiled.sh](/Users/anisrahm/Documents/lumi-job-profiler/templates/sbatch_profiled.sh).
+
+## Controls
+
+The helper is enabled by default. You can override behavior with:
 
 - `LUMI_PROFILE=0` to disable
 - `PROFILE_INTERVAL=2` to change sampling interval (seconds)
 - `PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap"` to adjust the sidecar launch
+- `PROFILE_DIR=/scratch/project_462000131/$USER/lumi-profile/$SLURM_JOB_ID` to override the output directory
 
 Example:
 
 ```bash
-LUMI_PROFILE=1 PROFILE_INTERVAL=1 sbatch templates/sbatch_profiled.sh
+LUMI_PROFILE=1 PROFILE_INTERVAL=1 sbatch your_job.sh
 ```
 
 ## Demo Workload
 
-The template runs a PyTorch ROCm workload when available:
+The example template runs a PyTorch ROCm workload when available:
 
 ```
 scripts/demo_pytorch_rocm.py --seconds 60 --size 4096 --dtype fp16
