@@ -65,11 +65,14 @@ If your job has multiple phases and you only want to profile part of it, use the
 source /scratch/project_462000131/anisrahm/lumi-job-profiler/scripts/profile_hook.sh
 trap profile_cleanup EXIT
 
-setup_step
+module load pytorch/2.7
+python3 prepare_data.py
+
 profile_start
-srun python3 train.py
+srun python3 train.py --epochs 10
 profile_stop
-postprocess_step
+
+python3 collect_results.py
 profile_summarize
 ```
 
