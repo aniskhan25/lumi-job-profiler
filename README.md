@@ -8,6 +8,7 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 - `templates/sbatch_profiled.sh`: example Slurm job using the profiling helper
 - `scripts/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
 - `scripts/analyze_summary.py`: rule-based analyzer that generates `analysis.json`
+- `scripts/generate_report.py`: report generator that emits `report.md` and `report.html`
 - `scripts/demo_pytorch_rocm.py`: a PyTorch ROCm demo workload to generate GPU activity
 - `implementation_plan.md`: system-level plan for a full feedback loop
 
@@ -53,6 +54,8 @@ sbatch your_job.sh
   <node>.log
   summary.json
   analysis.json
+  report.md
+  report.html
 ```
 
 ## Example Template
@@ -153,6 +156,13 @@ The profiler also writes a rule-based analysis artifact:
 /scratch/project_462000131/<username>/lumi-profile/<jobid>/analysis.json
 ```
 
+The profiler also generates user-facing reports:
+
+```text
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/report.md
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/report.html
+```
+
 `summary.json` contains:
 
 - `collection`: summary schema version, generation time, raw log schema versions, collection command, inferred sampling interval
@@ -188,6 +198,14 @@ The parser is best‑effort and tolerant of missing fields.
 - `root_causes`: rule-based findings such as overscaling, parallelism mismatch, or likely stalls
 - `recommendations`: deduplicated advisory actions derived from the findings
 - `job`: copied job metadata from `summary.json`
+
+`report.md` and `report.html` include:
+
+- a job summary
+- efficiency classification and key metrics
+- a per-GPU overview table
+- lightweight textual utilization bars
+- findings, recommendations, and documentation links where available
 
 ## Development
 

@@ -11,11 +11,13 @@ PROFILE_DIR="${PROFILE_DIR:-/scratch/project_462000131/${_profile_user}/lumi-pro
 PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap}"
 SUMMARIZER="${SUMMARIZER:-${_profile_hook_dir}/summarize_rocm_smi.py}"
 ANALYZER="${ANALYZER:-${_profile_hook_dir}/analyze_summary.py}"
+REPORT_GENERATOR="${REPORT_GENERATOR:-${_profile_hook_dir}/generate_report.py}"
 PROFILE_LOG_SCHEMA_VERSION="${PROFILE_LOG_SCHEMA_VERSION:-1}"
 PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks}"
 PROFILE_STARTED=0
 PROFILE_SUMMARIZED=0
 PROFILE_ANALYZED=0
+PROFILE_REPORTED=0
 PROFILER_PID=""
 
 profile_start() {
@@ -28,6 +30,7 @@ profile_start() {
   export PROFILE_DIR PROFILE_INTERVAL PROFILE_LOG_SCHEMA_VERSION PROFILE_COLLECT_COMMAND
   PROFILE_SUMMARIZED=0
   PROFILE_ANALYZED=0
+  PROFILE_REPORTED=0
 
   # Clear inherited CPU binding to avoid cpuset conflicts in the sidecar step.
   env -u SLURM_CPU_BIND -u SLURM_CPU_BIND_LIST -u SLURM_CPU_BIND_MASK -u SLURM_CPU_BIND_TYPE \
@@ -90,6 +93,27 @@ profile_analyze() {
   python3 "${ANALYZER}" "${PROFILE_DIR}/summary.json" "${PROFILE_DIR}/analysis.json" || true
   PROFILE_ANALYZED=1
   echo "Profile analysis: ${PROFILE_DIR}/analysis.json"
+
+  profile_report
+}
+
+profile_report() {
+  if [[ "${PROFILE_ENABLE}" != "1" || "${PROFILE_REPORTED}" == "1" || ! -f "${REPORT_GENERATOR}" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "${PROFILE_DIR}/summary.json" || ! -f "${PROFILE_DIR}/analysis.json" ]]; then
+    return 0
+  fi
+
+  python3 "${REPORT_GENERATOR}" \
+    "${PROFILE_DIR}/summary.json" \
+    "${PROFILE_DIR}/analysis.json" \
+    "${PROFILE_DIR}/report.md" \
+    "${PROFILE_DIR}/report.html" || true
+  PROFILE_REPORTED=1
+  echo "Profile report: ${PROFILE_DIR}/report.md"
+  echo "Profile report: ${PROFILE_DIR}/report.html"
 }
 
 profile_cleanup() {
