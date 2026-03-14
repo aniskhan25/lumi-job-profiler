@@ -74,6 +74,18 @@ profile_resolve_collect_command() {
   fi
 }
 
+profile_is_python_script() {
+  local path="$1"
+  local first_line=""
+
+  if [[ ! -r "${path}" ]]; then
+    return 1
+  fi
+
+  IFS= read -r first_line < "${path}" || true
+  [[ "${path}" == *.py || "${first_line}" == '#!'*python* ]]
+}
+
 profile_start() {
   if [[ "${PROFILE_ENABLE}" != "1" || "${PROFILE_STARTED}" == "1" ]]; then
     return 0
@@ -236,7 +248,7 @@ profile_resolve_rocprofv3_launcher() {
     return 0
   fi
 
-  if [[ "${resolved_path}" == *.py ]]; then
+  if profile_is_python_script "${resolved_path}"; then
     if [[ ! -x "${ROCPROFV3_PYTHON}" ]]; then
       ROCPROFV3_PATH=""
       return 0
