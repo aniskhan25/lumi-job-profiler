@@ -27,11 +27,13 @@ DEEP_TRACE_SUMMARY="${DEEP_TRACE_SUMMARY:-${DEEP_TRACE_DIR}/summary.json}"
 DEEP_MANIFEST="${DEEP_MANIFEST:-${DEEP_PROFILE_DIR}/deep_manifest.json}"
 ROCPROFV3_PATH="${ROCPROFV3_PATH:-$(command -v rocprofv3 2>/dev/null || true)}"
 ROCPROFV3_EXTRA_OPTS="${ROCPROFV3_EXTRA_OPTS:-}"
+ROCPROFV3_PYTHON="${ROCPROFV3_PYTHON:-/usr/bin/python3}"
 PROFILE_STARTED=0
 PROFILE_SUMMARIZED=0
 PROFILE_ANALYZED=0
 PROFILE_REPORTED=0
 PROFILER_PID=""
+ROCPROFV3_LAUNCHER=""
 
 profile_resolve_collect_command() {
   PROFILE_COLLECT_WARNING=""
@@ -213,6 +215,38 @@ profile_finalize_deep_trace() {
   echo "Deep trace manifest: ${DEEP_MANIFEST}"
 }
 
+profile_resolve_rocprofv3_launcher() {
+  ROCPROFV3_LAUNCHER=""
+
+  if [[ -z "${ROCPROFV3_PATH}" ]]; then
+    return 0
+  fi
+
+  local resolved_path="${ROCPROFV3_PATH}"
+  if command -v readlink >/dev/null 2>&1; then
+    local resolved_candidate=""
+    resolved_candidate="$(readlink -f "${ROCPROFV3_PATH}" 2>/dev/null || true)"
+    if [[ -n "${resolved_candidate}" ]]; then
+      resolved_path="${resolved_candidate}"
+    fi
+  fi
+
+  if [[ ! -e "${resolved_path}" ]]; then
+    ROCPROFV3_PATH=""
+    return 0
+  fi
+
+  if [[ "${resolved_path}" == *.py ]]; then
+    if [[ ! -x "${ROCPROFV3_PYTHON}" ]]; then
+      ROCPROFV3_PATH=""
+      return 0
+    fi
+    ROCPROFV3_LAUNCHER="${ROCPROFV3_PYTHON} ${resolved_path}"
+  else
+    ROCPROFV3_LAUNCHER="${resolved_path}"
+  fi
+}
+
 profile_run_command() {
   if [[ "${PROFILE_MODE}" != "deep-trace" ]]; then
     "$@"
@@ -220,8 +254,9 @@ profile_run_command() {
   fi
 
   mkdir -p "${DEEP_TRACE_RAW_DIR}"
+  profile_resolve_rocprofv3_launcher
 
-  if [[ -z "${ROCPROFV3_PATH}" ]]; then
+  if [[ -z "${ROCPROFV3_LAUNCHER}" ]]; then
     echo "Deep trace requested but rocprofv3 was not found; running without deep trace artifacts." >&2
     "$@"
     local status=$?
@@ -230,7 +265,6 @@ profile_run_command() {
   fi
 
   local -a rocprof_cmd=(
-    "${ROCPROFV3_PATH}"
     --runtime-trace
     --stats
     --output-format
@@ -249,6 +283,9 @@ profile_run_command() {
     rocprof_cmd+=("${rocprof_extra_opts[@]}")
   fi
 
+  local -a rocprof_launcher=()
+  read -r -a rocprof_launcher <<< "${ROCPROFV3_LAUNCHER}"
+  rocprof_cmd=("${rocprof_launcher[@]}" "${rocprof_cmd[@]}")
   rocprof_cmd+=(-- "$@")
   "${rocprof_cmd[@]}"
   local status=$?
