@@ -9,8 +9,10 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 SUMMARIZER_PATH = REPO_ROOT / "scripts" / "summarize_rocm_smi.py"
 ANALYZER_PATH = REPO_ROOT / "scripts" / "analyze_summary.py"
 REPORT_PATH = REPO_ROOT / "scripts" / "generate_report.py"
+DEEP_TRACE_PATH = REPO_ROOT / "scripts" / "summarize_rocprofv3.py"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005028.log"
 CPU_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005029_cpu.log"
+DEEP_TRACE_FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "rocprofv3_trace" / "raw"
 
 
 def load_module(path, name):
@@ -26,6 +28,7 @@ class GenerateReportTests(unittest.TestCase):
         self.summarizer = load_module(SUMMARIZER_PATH, "summarize_rocm_smi")
         self.analyzer = load_module(ANALYZER_PATH, "analyze_summary")
         self.reporter = load_module(REPORT_PATH, "generate_report")
+        self.deep_trace = load_module(DEEP_TRACE_PATH, "summarize_rocprofv3")
         self.temp_dir = tempfile.mkdtemp(prefix="lumi-profiler-report-")
         shutil.copy(FIXTURE_PATH, pathlib.Path(self.temp_dir) / "nid005028.log")
 
@@ -64,6 +67,30 @@ class GenerateReportTests(unittest.TestCase):
         self.assertIn("Peak memory used", report["markdown"])
         self.assertIn("Average CPU utilization", report["html"])
         self.assertIn("cpu_bottleneck", report["markdown"])
+
+    def test_report_includes_deep_trace_section(self):
+        summary = self.summarizer.summarize_logs(self.temp_dir)
+        analysis = self.analyzer.analyze_summary(summary)
+        deep_manifest = self.deep_trace.build_deep_manifest(
+            self.deep_trace.build_trace_summary(
+                raw_dir=DEEP_TRACE_FIXTURE_DIR,
+                tool_path="/usr/bin/rocprofv3",
+                mode="deep-trace",
+                command="srun python3 demo.py",
+                status="completed",
+                exit_code=0,
+            ),
+            pathlib.Path(self.temp_dir) / "deep_profile" / "trace" / "summary.json",
+            pathlib.Path(self.temp_dir) / "deep_profile" / "deep_manifest.json",
+        )
+
+        report = self.reporter.generate_report(summary, analysis, deep_manifest)
+
+        self.assertIn("## Deep Trace", report["markdown"])
+        self.assertIn("hipLaunchKernel", report["markdown"])
+        self.assertIn("void gemm_kernel", report["markdown"])
+        self.assertIn("<h2>Deep Trace</h2>", report["html"])
+        self.assertIn("hipLaunchKernel", report["html"])
 
 
 if __name__ == "__main__":

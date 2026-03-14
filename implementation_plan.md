@@ -521,13 +521,20 @@ User workflow impact
 ### 13.7 Phase 6: Optional Deep Profiling
 
 Deliverables
-- Higher-frequency sampling or tracing
-- Kernel-level or ROCm-tool-based profiling modes
-- Debug-oriented deep analysis
+- `LUMI_PROFILE_MODE=deep-trace` as an explicit opt-in mode
+- `rocprofv3`-based trace collection under `deep_profile/trace/`
+- `deep_manifest.json` and trace summaries that sit alongside the existing lightweight artifacts
+- Debug-oriented deep analysis of GPU trace artifacts without changing the default lightweight path
 
 User workflow impact
 - Enabled only through explicit opt-in
 - Lightweight default remains the recommended path
+- Existing `profile_run` and summary/report artifacts remain available in deep mode
+
+Current scope decision
+- Implement only `deep-trace` backed by `rocprofv3`
+- Do not depend on ROCm Systems Profiler / `rocprof-sys` in the active roadmap
+- Treat ROCm Systems Profiler as future work pending a supported install path on LUMI
 
 ---
 

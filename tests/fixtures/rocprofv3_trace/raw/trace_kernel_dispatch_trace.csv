@@ -1,0 +1,3 @@
+StartNs,EndNs,KernelName
+0,5000,void gemm_kernel
+5000,7000,void layernorm_kernel

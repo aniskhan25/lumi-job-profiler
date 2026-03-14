@@ -1,0 +1,4 @@
+Name,Calls,TotalDurationNs,AverageNs,Percentage
+hipLaunchKernel,12,48000,4000,60.0
+hipMemcpyAsync,4,12000,3000,15.0
+hipStreamSynchronize,2,8000,4000,10.0

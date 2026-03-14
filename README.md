@@ -7,6 +7,7 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 - `scripts/profile_hook.sh`: shell helper for minimal opt-in profiling in existing jobs
 - `templates/sbatch_profiled.sh`: example Slurm job using the profiling helper
 - `scripts/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
+- `scripts/summarize_rocprofv3.py`: best-effort parser that generates deep-trace summaries and manifests
 - `scripts/analyze_summary.py`: rule-based analyzer that generates `analysis.json`
 - `scripts/generate_report.py`: report generator that emits `report.md` and `report.html`
 - `scripts/demo_pytorch_rocm.py`: a PyTorch ROCm demo workload to generate GPU activity
@@ -56,6 +57,11 @@ sbatch your_job.sh
   analysis.json
   report.md
   report.html
+  deep_profile/
+    deep_manifest.json
+    trace/
+      summary.json
+      raw/
 ```
 
 ## Example Template
@@ -89,6 +95,11 @@ Available functions:
 - `profile_cleanup`: run `profile_stop` and `profile_summarize` safely
 - `profile_run -- <command>`: convenience wrapper for single-command jobs
 
+Deep-trace note:
+
+- `LUMI_PROFILE_MODE=deep-trace` currently applies to the wrapped `profile_run -- <command>` path
+- manual lifecycle control still manages the lightweight `rocm-smi` sidecar
+
 ## Controls
 
 The helper is enabled by default. You can override behavior with:
@@ -96,6 +107,8 @@ The helper is enabled by default. You can override behavior with:
 - `LUMI_PROFILE=0` to disable
 - `PROFILE_INTERVAL=2` to change sampling interval (seconds)
 - `PROFILE_COLLECT_CPU=1` to collect optional host CPU, memory, and load metrics
+- `LUMI_PROFILE_MODE=deep-trace` to keep the lightweight profile and also wrap `profile_run` with `rocprofv3`
+- `ROCPROFV3_EXTRA_OPTS="..."` to append extra `rocprofv3` options in deep-trace mode
 - `PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap"` to adjust the sidecar launch
 - `PROFILE_DIR=/scratch/project_462000131/$USER/lumi-profile/$SLURM_JOB_ID` to override the output directory
 
@@ -103,6 +116,12 @@ Example:
 
 ```bash
 LUMI_PROFILE=1 PROFILE_INTERVAL=1 sbatch your_job.sh
+```
+
+Deep-trace example:
+
+```bash
+LUMI_PROFILE_MODE=deep-trace sbatch your_job.sh
 ```
 
 ## Demo Workload
@@ -178,6 +197,16 @@ The profiler also generates user-facing reports:
 /scratch/project_462000131/<username>/lumi-profile/<jobid>/report.html
 ```
 
+When `LUMI_PROFILE_MODE=deep-trace` is set and `rocprofv3` is available, the profiler also writes:
+
+```text
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/deep_profile/deep_manifest.json
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/deep_profile/trace/summary.json
+/scratch/project_462000131/<username>/lumi-profile/<jobid>/deep_profile/trace/raw/
+```
+
+Deep-trace mode keeps the existing lightweight artifacts and adds `rocprofv3` trace artifacts for the wrapped command. If `rocprofv3` is not available, the job still runs and `deep_manifest.json` records the fallback.
+
 `summary.json` contains:
 
 - `collection`: summary schema version, generation time, raw log schema versions, collection command, inferred sampling interval
@@ -229,6 +258,7 @@ The parser is best‑effort and tolerant of missing fields.
 - a per-GPU overview table
 - lightweight textual utilization bars
 - findings, recommendations, and documentation links where available
+- deep-trace artifact status and top `rocprofv3` entries when deep mode is used
 
 ## Development
 

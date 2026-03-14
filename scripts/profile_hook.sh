@@ -6,6 +6,7 @@ _profile_user="${USER:-${LOGNAME:-unknown}}"
 _profile_job_id="${SLURM_JOB_ID:-manual}"
 
 PROFILE_ENABLE="${LUMI_PROFILE:-1}"
+PROFILE_MODE="${LUMI_PROFILE_MODE:-light}"
 PROFILE_INTERVAL="${PROFILE_INTERVAL:-2}"
 PROFILE_DIR="${PROFILE_DIR:-/scratch/project_462000131/${_profile_user}/lumi-profile/${_profile_job_id}}"
 PROFILE_COLLECT_CPU="${PROFILE_COLLECT_CPU:-0}"
@@ -13,8 +14,16 @@ PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 
 SUMMARIZER="${SUMMARIZER:-${_profile_hook_dir}/summarize_rocm_smi.py}"
 ANALYZER="${ANALYZER:-${_profile_hook_dir}/analyze_summary.py}"
 REPORT_GENERATOR="${REPORT_GENERATOR:-${_profile_hook_dir}/generate_report.py}"
+ROCPROFV3_SUMMARIZER="${ROCPROFV3_SUMMARIZER:-${_profile_hook_dir}/summarize_rocprofv3.py}"
 PROFILE_LOG_SCHEMA_VERSION="${PROFILE_LOG_SCHEMA_VERSION:-1}"
 PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks}"
+DEEP_PROFILE_DIR="${DEEP_PROFILE_DIR:-${PROFILE_DIR}/deep_profile}"
+DEEP_TRACE_DIR="${DEEP_TRACE_DIR:-${DEEP_PROFILE_DIR}/trace}"
+DEEP_TRACE_RAW_DIR="${DEEP_TRACE_RAW_DIR:-${DEEP_TRACE_DIR}/raw}"
+DEEP_TRACE_SUMMARY="${DEEP_TRACE_SUMMARY:-${DEEP_TRACE_DIR}/summary.json}"
+DEEP_MANIFEST="${DEEP_MANIFEST:-${DEEP_PROFILE_DIR}/deep_manifest.json}"
+ROCPROFV3_PATH="${ROCPROFV3_PATH:-$(command -v rocprofv3 2>/dev/null || true)}"
+ROCPROFV3_EXTRA_OPTS="${ROCPROFV3_EXTRA_OPTS:-}"
 PROFILE_STARTED=0
 PROFILE_SUMMARIZED=0
 PROFILE_ANALYZED=0
@@ -129,6 +138,84 @@ profile_cleanup() {
   profile_summarize
 }
 
+profile_finalize_deep_trace() {
+  local exit_code="$1"
+  local status_label="$2"
+  shift 2
+
+  if [[ "${PROFILE_ENABLE}" != "1" || "${PROFILE_MODE}" != "deep-trace" || ! -f "${ROCPROFV3_SUMMARIZER}" ]]; then
+    return 0
+  fi
+
+  mkdir -p "${DEEP_PROFILE_DIR}" "${DEEP_TRACE_RAW_DIR}"
+
+  local command_string=""
+  printf -v command_string '%q ' "$@"
+  command_string="${command_string% }"
+
+  python3 "${ROCPROFV3_SUMMARIZER}" \
+    "${DEEP_TRACE_RAW_DIR}" \
+    "${DEEP_TRACE_SUMMARY}" \
+    "${DEEP_MANIFEST}" \
+    --tool-path "${ROCPROFV3_PATH}" \
+    --mode "${PROFILE_MODE}" \
+    --command "${command_string}" \
+    --status "${status_label}" \
+    --exit-code "${exit_code}" || true
+
+  echo "Deep trace summary: ${DEEP_TRACE_SUMMARY}"
+  echo "Deep trace manifest: ${DEEP_MANIFEST}"
+}
+
+profile_run_command() {
+  if [[ "${PROFILE_MODE}" != "deep-trace" ]]; then
+    "$@"
+    return $?
+  fi
+
+  mkdir -p "${DEEP_TRACE_RAW_DIR}"
+
+  if [[ -z "${ROCPROFV3_PATH}" ]]; then
+    echo "Deep trace requested but rocprofv3 was not found; running without deep trace artifacts." >&2
+    "$@"
+    local status=$?
+    profile_finalize_deep_trace "${status}" "fallback_missing_tool" "$@"
+    return "${status}"
+  fi
+
+  local -a rocprof_cmd=(
+    "${ROCPROFV3_PATH}"
+    --runtime-trace
+    --stats
+    --output-format
+    csv
+    json
+    --output-directory
+    "${DEEP_TRACE_RAW_DIR}"
+    --output-file
+    trace
+    --output-config
+  )
+
+  if [[ -n "${ROCPROFV3_EXTRA_OPTS}" ]]; then
+    local -a rocprof_extra_opts=()
+    read -r -a rocprof_extra_opts <<< "${ROCPROFV3_EXTRA_OPTS}"
+    rocprof_cmd+=("${rocprof_extra_opts[@]}")
+  fi
+
+  rocprof_cmd+=(-- "$@")
+  "${rocprof_cmd[@]}"
+  local status=$?
+
+  if [[ "${status}" == "0" ]]; then
+    profile_finalize_deep_trace "${status}" "completed" "$@"
+  else
+    profile_finalize_deep_trace "${status}" "completed_with_command_error" "$@"
+  fi
+
+  return "${status}"
+}
+
 profile_run() {
   if [[ "$#" -gt 0 && "$1" == "--" ]]; then
     shift
@@ -141,7 +228,7 @@ profile_run() {
 
   profile_start
 
-  if "$@"; then
+  if profile_run_command "$@"; then
     status=0
   else
     status=$?

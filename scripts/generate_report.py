@@ -36,6 +36,14 @@ def fmt_num(value):
     return f"{value:.1f}"
 
 
+def fmt_duration_ns(value):
+    if value is None:
+        return "n/a"
+    if isinstance(value, int):
+        return f"{value} ns"
+    return f"{value:.1f} ns"
+
+
 def bar(value, scale=100.0, width=20):
     if value is None:
         return "." * width
@@ -93,7 +101,63 @@ def root_cause_lines(analysis):
     return lines
 
 
-def build_markdown(summary, analysis):
+def load_deep_manifest(summary, deep_manifest_path=None):
+    manifest_path = deep_manifest_path
+    if manifest_path is None:
+        log_dir = summary.get("log_dir")
+        if not log_dir:
+            return None
+        manifest_path = os.path.join(log_dir, "deep_profile", "deep_manifest.json")
+
+    if not manifest_path or not os.path.isfile(manifest_path):
+        return None
+
+    with open(manifest_path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def deep_trace_lines(deep_manifest):
+    if not deep_manifest:
+        return []
+
+    preview = deep_manifest.get("trace_summary_preview", {})
+    lines = [
+        f"- Mode: {deep_manifest.get('mode', 'n/a')}",
+        f"- Status: {deep_manifest.get('status', 'n/a')}",
+        f"- Tool: {deep_manifest.get('tool', {}).get('path') or 'n/a'}",
+        f"- Command: {deep_manifest.get('command') or 'n/a'}",
+        f"- Raw trace directory: {deep_manifest.get('artifacts', {}).get('trace_raw_dir') or 'n/a'}",
+        f"- Trace summary: {deep_manifest.get('artifacts', {}).get('trace_summary') or 'n/a'}",
+        f"- HIP API trace rows: {fmt_num(preview.get('hip_api_trace_rows'))}",
+        f"- Kernel dispatch trace rows: {fmt_num(preview.get('kernel_dispatch_trace_rows'))}",
+        f"- Memory copy trace rows: {fmt_num(preview.get('memory_copy_trace_rows'))}",
+    ]
+
+    top_hip = preview.get("top_hip_apis", [])
+    if top_hip:
+        rendered = ", ".join(
+            f"{item.get('name', 'unknown')} ({fmt_num(item.get('calls'))} calls, {fmt_duration_ns(item.get('total_duration_ns'))})"
+            for item in top_hip[:3]
+        )
+        lines.append(f"- Top HIP APIs: {rendered}")
+
+    top_kernels = preview.get("top_kernel_dispatches", [])
+    if top_kernels:
+        rendered = ", ".join(
+            f"{item.get('name', 'unknown')} ({fmt_num(item.get('calls'))} calls, {fmt_duration_ns(item.get('total_duration_ns'))})"
+            for item in top_kernels[:3]
+        )
+        lines.append(f"- Top kernels: {rendered}")
+
+    warnings = deep_manifest.get("warnings", [])
+    if warnings:
+        rendered = "; ".join(warnings)
+        lines.append(f"- Warnings: {rendered}")
+
+    return lines
+
+
+def build_markdown(summary, analysis, deep_manifest=None):
     job = summary.get("job", {})
     job_metrics = summary.get("job_metrics", {})
     efficiency = analysis.get("efficiency", {})
@@ -178,10 +242,20 @@ def build_markdown(summary, analysis):
         ]
     )
 
+    if deep_manifest:
+        lines.extend(
+            [
+                "",
+                "## Deep Trace",
+                "",
+            ]
+        )
+        lines.extend(deep_trace_lines(deep_manifest))
+
     return "\n".join(lines) + "\n"
 
 
-def render_html(summary, analysis):
+def render_html(summary, analysis, deep_manifest=None):
     job = summary.get("job", {})
     job_metrics = summary.get("job_metrics", {})
     efficiency = analysis.get("efficiency", {})
@@ -193,6 +267,13 @@ def render_html(summary, analysis):
     recommendations_html = "".join(
         f"<li>{html.escape(line)}</li>" for line in recommendation_lines(analysis)
     )
+    deep_trace_html = ""
+    if deep_manifest:
+        deep_trace_items = "".join(
+            f"<li>{html.escape(line[2:] if line.startswith('- ') else line)}</li>"
+            for line in deep_trace_lines(deep_manifest)
+        )
+        deep_trace_html = f"<h2>Deep Trace</h2><ul>{deep_trace_items}</ul>"
 
     if rows:
         table_rows = "".join(
@@ -273,18 +354,20 @@ def render_html(summary, analysis):
   <ul>{findings_html}</ul>
   <h2>Recommendations</h2>
   <ul>{recommendations_html}</ul>
+  {deep_trace_html}
 </body>
 </html>
 """
 
 
-def generate_report(summary, analysis):
-    markdown = build_markdown(summary, analysis)
+def generate_report(summary, analysis, deep_manifest=None):
+    manifest = deep_manifest or load_deep_manifest(summary)
+    markdown = build_markdown(summary, analysis, manifest)
     report = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
         "generated_at": iso_timestamp(),
         "markdown": markdown,
-        "html": render_html(summary, analysis),
+        "html": render_html(summary, analysis, manifest),
     }
     return report
 
@@ -295,6 +378,7 @@ def main():
     parser.add_argument("analysis_json", help="Path to analysis.json")
     parser.add_argument("markdown_output", nargs="?", default=None, help="Path to report.md")
     parser.add_argument("html_output", nargs="?", default=None, help="Path to report.html")
+    parser.add_argument("--deep-manifest", default=None, help="Optional path to deep_manifest.json")
     args = parser.parse_args()
 
     with open(args.summary_json, "r", encoding="utf-8") as f:
@@ -303,7 +387,7 @@ def main():
     with open(args.analysis_json, "r", encoding="utf-8") as f:
         analysis = json.load(f)
 
-    report = generate_report(summary, analysis)
+    report = generate_report(summary, analysis, load_deep_manifest(summary, args.deep_manifest))
 
     if args.markdown_output:
         with open(args.markdown_output, "w", encoding="utf-8") as f:

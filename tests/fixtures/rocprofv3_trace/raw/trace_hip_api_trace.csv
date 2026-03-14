@@ -1,0 +1,4 @@
+StartNs,EndNs,Name
+0,1000,hipLaunchKernel
+1000,2000,hipMemcpyAsync
+2000,3000,hipLaunchKernel
