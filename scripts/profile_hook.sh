@@ -286,7 +286,6 @@ profile_run_command() {
     "${DEEP_TRACE_RAW_DIR}"
     --output-file
     trace
-    --output-config
   )
 
   if [[ -n "${ROCPROFV3_EXTRA_OPTS}" ]]; then
