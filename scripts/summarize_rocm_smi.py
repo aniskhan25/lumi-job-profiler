@@ -64,6 +64,34 @@ def iso_timestamp():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def parse_slurm_count(value):
+    if not value:
+        return None
+    match = re.search(r"\d+", str(value))
+    if not match:
+        return None
+    return int(match.group(0))
+
+
+def infer_gpus_requested():
+    nodes_requested = parse_slurm_count(os.environ.get("SLURM_JOB_NUM_NODES"))
+    gpus_per_node = parse_slurm_count(os.environ.get("SLURM_GPUS_PER_NODE"))
+    if nodes_requested is not None and gpus_per_node is not None:
+        return str(nodes_requested * gpus_per_node)
+
+    explicit_total = parse_slurm_count(os.environ.get("SLURM_GPUS"))
+    if explicit_total is not None:
+        return str(explicit_total)
+
+    gpu_ids = os.environ.get("SLURM_JOB_GPUS")
+    if gpu_ids:
+        ids = [token for token in re.split(r"[,\s]+", gpu_ids.strip()) if token]
+        if ids:
+            return str(len(ids))
+
+    return None
+
+
 def parse_header_metadata(lines):
     metadata = {}
     for line in lines:
@@ -345,8 +373,9 @@ def build_job_metadata(log_dir):
         "ntasks": os.environ.get("SLURM_NTASKS"),
         "tasks_per_node": os.environ.get("SLURM_TASKS_PER_NODE"),
         "cpus_per_task": os.environ.get("SLURM_CPUS_PER_TASK"),
-        "gpus_requested": os.environ.get("SLURM_GPUS") or os.environ.get("SLURM_JOB_GPUS"),
+        "gpus_requested": infer_gpus_requested(),
         "gpus_per_node": os.environ.get("SLURM_GPUS_PER_NODE"),
+        "job_gpu_ids": os.environ.get("SLURM_JOB_GPUS"),
         "gres": os.environ.get("SLURM_GRES"),
         "submit_dir": os.environ.get("SLURM_SUBMIT_DIR"),
         "log_dir": os.path.abspath(log_dir),

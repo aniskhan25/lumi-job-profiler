@@ -5,6 +5,7 @@ import pathlib
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -90,6 +91,23 @@ class SummarizeRocmSmiTests(unittest.TestCase):
         self.assertAlmostEqual(summary["job_metrics"]["avg_cpu_iowait_pct"], 5.0)
         self.assertAlmostEqual(summary["job_metrics"]["peak_memory_used_pct"], 65.0)
         self.assertAlmostEqual(summary["job_metrics"]["avg_load1"], 4.5)
+
+    def test_job_metadata_prefers_physical_gpu_request_over_gpu_id_list(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "SLURM_JOB_NUM_NODES": "1",
+                "SLURM_GPUS_PER_NODE": "1",
+                "SLURM_GPUS": "2",
+                "SLURM_JOB_GPUS": "0,1",
+            },
+            clear=False,
+        ):
+            metadata = self.module.build_job_metadata(self.temp_dir)
+
+        self.assertEqual(metadata["gpus_requested"], "1")
+        self.assertEqual(metadata["gpus_per_node"], "1")
+        self.assertEqual(metadata["job_gpu_ids"], "0,1")
 
 
 if __name__ == "__main__":
