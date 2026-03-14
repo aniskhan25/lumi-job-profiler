@@ -16,7 +16,9 @@ ANALYZER="${ANALYZER:-${_profile_hook_dir}/analyze_summary.py}"
 REPORT_GENERATOR="${REPORT_GENERATOR:-${_profile_hook_dir}/generate_report.py}"
 ROCPROFV3_SUMMARIZER="${ROCPROFV3_SUMMARIZER:-${_profile_hook_dir}/summarize_rocprofv3.py}"
 PROFILE_LOG_SCHEMA_VERSION="${PROFILE_LOG_SCHEMA_VERSION:-1}"
-PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks}"
+PROFILE_COLLECT_COMMAND_DEFAULT="rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks"
+PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-${PROFILE_COLLECT_COMMAND_DEFAULT}}"
+PROFILE_COLLECT_WARNING=""
 DEEP_PROFILE_DIR="${DEEP_PROFILE_DIR:-${PROFILE_DIR}/deep_profile}"
 DEEP_TRACE_DIR="${DEEP_TRACE_DIR:-${DEEP_PROFILE_DIR}/trace}"
 DEEP_TRACE_RAW_DIR="${DEEP_TRACE_RAW_DIR:-${DEEP_TRACE_DIR}/raw}"
@@ -30,14 +32,49 @@ PROFILE_ANALYZED=0
 PROFILE_REPORTED=0
 PROFILER_PID=""
 
+profile_resolve_collect_command() {
+  PROFILE_COLLECT_WARNING=""
+
+  if [[ "${PROFILE_COLLECT_COMMAND}" != "${PROFILE_COLLECT_COMMAND_DEFAULT}" ]]; then
+    return 0
+  fi
+
+  local rocm_smi_path=""
+  if ! rocm_smi_path="$(command -v rocm-smi 2>/dev/null)"; then
+    PROFILE_COLLECT_WARNING="rocm-smi was not found in PATH"
+    return 0
+  fi
+
+  local resolved_path="${rocm_smi_path}"
+  if command -v readlink >/dev/null 2>&1; then
+    local resolved_candidate=""
+    resolved_candidate="$(readlink -f "${rocm_smi_path}" 2>/dev/null || true)"
+    if [[ -n "${resolved_candidate}" ]]; then
+      resolved_path="${resolved_candidate}"
+    fi
+  fi
+
+  if [[ ! -e "${resolved_path}" ]]; then
+    PROFILE_COLLECT_WARNING="rocm-smi resolved to a missing path: ${resolved_path}"
+    return 0
+  fi
+
+  if [[ "${resolved_path}" == *.py ]]; then
+    PROFILE_COLLECT_COMMAND="python3 ${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
+  else
+    PROFILE_COLLECT_COMMAND="${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
+  fi
+}
+
 profile_start() {
   if [[ "${PROFILE_ENABLE}" != "1" || "${PROFILE_STARTED}" == "1" ]]; then
     return 0
   fi
 
+  profile_resolve_collect_command
   mkdir -p "${PROFILE_DIR}"
   rm -f "${PROFILE_DIR}/STOP"
-  export PROFILE_DIR PROFILE_INTERVAL PROFILE_LOG_SCHEMA_VERSION PROFILE_COLLECT_COMMAND PROFILE_COLLECT_CPU
+  export PROFILE_DIR PROFILE_INTERVAL PROFILE_LOG_SCHEMA_VERSION PROFILE_COLLECT_COMMAND PROFILE_COLLECT_CPU PROFILE_COLLECT_WARNING
   PROFILE_SUMMARIZED=0
   PROFILE_ANALYZED=0
   PROFILE_REPORTED=0
@@ -51,6 +88,9 @@ profile_start() {
     echo "# profile_log_schema_version=${PROFILE_LOG_SCHEMA_VERSION}" >> "${out}"
     echo "# profile_collect_command=${PROFILE_COLLECT_COMMAND}" >> "${out}"
     echo "# profile_collect_cpu=${PROFILE_COLLECT_CPU}" >> "${out}"
+    if [[ -n "${PROFILE_COLLECT_WARNING}" ]]; then
+      echo "# profile_collect_warning=${PROFILE_COLLECT_WARNING}" >> "${out}"
+    fi
     while [[ ! -f "${PROFILE_DIR}/STOP" ]]; do
       ts=$(date +%s)
       echo "ts=${ts}" >> "${out}"
