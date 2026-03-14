@@ -25,7 +25,7 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 1. Clone the repo on shared scratch:
 
 ```bash
-cd /scratch/project_462000131/anisrahm
+cd /scratch/<project_id>/<user>
 git clone https://github.com/aniskhan25/lumi-job-profiler.git
 cd lumi-job-profiler
 ```
@@ -33,7 +33,7 @@ cd lumi-job-profiler
 2. In your existing `sbatch` script, add the hook after your module loads:
 
 ```bash
-source /scratch/project_462000131/anisrahm/lumi-job-profiler/scripts/profile_hook.sh
+source /scratch/<project_id>/<user>/lumi-job-profiler/scripts/profile_hook.sh
 ```
 
 3. Wrap your current launch command:
@@ -51,7 +51,7 @@ sbatch your_job.sh
 5. After the job completes, find logs and summary here:
 
 ```
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/
   <node>.log
   summary.json
   analysis.json
@@ -73,7 +73,7 @@ If you want a complete working example, use [templates/sbatch_profiled.sh](/User
 If your job has multiple phases and you only want to profile part of it, use the lifecycle functions directly:
 
 ```bash
-source /scratch/project_462000131/anisrahm/lumi-job-profiler/scripts/profile_hook.sh
+source /scratch/<project_id>/<user>/lumi-job-profiler/scripts/profile_hook.sh
 trap profile_cleanup EXIT
 
 module load pytorch/2.7
@@ -110,7 +110,7 @@ The helper is enabled by default. You can override behavior with:
 - `LUMI_PROFILE_MODE=deep-trace` to keep the lightweight profile and also wrap `profile_run` with `rocprofv3`
 - `ROCPROFV3_EXTRA_OPTS="..."` to append extra `rocprofv3` options in deep-trace mode
 - `PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap"` to adjust the sidecar launch
-- `PROFILE_DIR=/scratch/project_462000131/$USER/lumi-profile/$SLURM_JOB_ID` to override the output directory
+- `PROFILE_DIR=/scratch/<project_id>/$USER/lumi-profile/$SLURM_JOB_ID` to override the output directory
 
 Example:
 
@@ -168,7 +168,7 @@ If `PROFILE_COLLECT_CPU=1` is set, the profiler also captures lightweight host m
 The profiler writes raw samples to per-node log files:
 
 ```text
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/<node>.log
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/<node>.log
 ```
 
 Each raw log includes metadata headers such as:
@@ -181,28 +181,28 @@ Each raw log includes metadata headers such as:
 At the end of profiling, these raw samples are summarized into:
 
 ```text
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/summary.json
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/summary.json
 ```
 
 The profiler also writes a rule-based analysis artifact:
 
 ```text
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/analysis.json
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/analysis.json
 ```
 
 The profiler also generates user-facing reports:
 
 ```text
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/report.md
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/report.html
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/report.md
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/report.html
 ```
 
 When `LUMI_PROFILE_MODE=deep-trace` is set and `rocprofv3` is available, the profiler also writes:
 
 ```text
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/deep_profile/deep_manifest.json
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/deep_profile/trace/summary.json
-/scratch/project_462000131/<username>/lumi-profile/<jobid>/deep_profile/trace/raw/
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/deep_manifest.json
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/trace/summary.json
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/trace/raw/
 ```
 
 Deep-trace mode keeps the existing lightweight artifacts and adds `rocprofv3` trace artifacts for the wrapped command. If `rocprofv3` is not available, the job still runs and `deep_manifest.json` records the fallback.
