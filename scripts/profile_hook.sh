@@ -19,6 +19,7 @@ PROFILE_LOG_SCHEMA_VERSION="${PROFILE_LOG_SCHEMA_VERSION:-1}"
 PROFILE_COLLECT_COMMAND_DEFAULT="rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks"
 PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-${PROFILE_COLLECT_COMMAND_DEFAULT}}"
 PROFILE_COLLECT_WARNING=""
+ROCM_SMI_PYTHON="${ROCM_SMI_PYTHON:-/usr/bin/python3}"
 DEEP_PROFILE_DIR="${DEEP_PROFILE_DIR:-${PROFILE_DIR}/deep_profile}"
 DEEP_TRACE_DIR="${DEEP_TRACE_DIR:-${DEEP_PROFILE_DIR}/trace}"
 DEEP_TRACE_RAW_DIR="${DEEP_TRACE_RAW_DIR:-${DEEP_TRACE_DIR}/raw}"
@@ -60,7 +61,12 @@ profile_resolve_collect_command() {
   fi
 
   if [[ "${resolved_path}" == *.py ]]; then
-    PROFILE_COLLECT_COMMAND="python3 ${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
+    local rocm_smi_python="${ROCM_SMI_PYTHON}"
+    if [[ ! -x "${rocm_smi_python}" ]]; then
+      PROFILE_COLLECT_WARNING="Configured ROCm SMI Python interpreter is not executable: ${rocm_smi_python}"
+      return 0
+    fi
+    PROFILE_COLLECT_COMMAND="${rocm_smi_python} ${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
   else
     PROFILE_COLLECT_COMMAND="${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
   fi
