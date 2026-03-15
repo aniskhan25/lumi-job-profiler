@@ -28,6 +28,12 @@ DEEP_MANIFEST="${DEEP_MANIFEST:-${DEEP_PROFILE_DIR}/deep_manifest.json}"
 ROCPROFV3_PATH="${ROCPROFV3_PATH:-$(command -v rocprofv3 2>/dev/null || true)}"
 ROCPROFV3_EXTRA_OPTS="${ROCPROFV3_EXTRA_OPTS:-}"
 ROCPROFV3_PYTHON="${ROCPROFV3_PYTHON:-/usr/bin/python3}"
+LUMI_CONTAINER_RUNTIME="${LUMI_CONTAINER_RUNTIME:-singularity}"
+LUMI_CONTAINER_IMAGE="${LUMI_CONTAINER_IMAGE:-}"
+LUMI_CONTAINER_USE_ROCM="${LUMI_CONTAINER_USE_ROCM:-1}"
+LUMI_CONTAINER_BIND_EXTRA="${LUMI_CONTAINER_BIND_EXTRA:-}"
+LUMI_CONTAINER_WORKDIR="${LUMI_CONTAINER_WORKDIR:-${DEEP_PROFILE_DIR}/container_workdir}"
+LUMI_CONTAINER_ROCPROFV3="${LUMI_CONTAINER_ROCPROFV3:-rocprofv3}"
 PROFILE_STARTED=0
 PROFILE_SUMMARIZED=0
 PROFILE_ANALYZED=0
@@ -35,8 +41,11 @@ PROFILE_REPORTED=0
 PROFILER_PID=""
 ROCPROFV3_LAUNCHER=""
 PROFILE_ROCPROFV3_CMD=()
+PROFILE_CONTAINER_CMD=()
+PROFILE_CONTAINER_BIND_SPECS=()
 PROFILE_SRUN_ARGS=()
 PROFILE_SRUN_PAYLOAD_ARGS=()
+PROFILE_DEEP_TRACE_TOOL_PATH=""
 
 profile_resolve_collect_command() {
   PROFILE_COLLECT_WARNING=""
@@ -87,6 +96,33 @@ profile_is_python_script() {
 
   IFS= read -r first_line < "${path}" || true
   [[ "${path}" == *.py || "${first_line}" == '#!'*python* ]]
+}
+
+profile_container_enabled() {
+  [[ -n "${LUMI_CONTAINER_IMAGE}" ]]
+}
+
+profile_container_runtime_available() {
+  command -v "${LUMI_CONTAINER_RUNTIME}" >/dev/null 2>&1
+}
+
+profile_add_container_bind_spec() {
+  local spec="$1"
+  local existing=""
+
+  [[ -n "${spec}" ]] || return 0
+
+  for existing in "${PROFILE_CONTAINER_BIND_SPECS[@]}"; do
+    [[ "${existing}" == "${spec}" ]] && return 0
+  done
+
+  PROFILE_CONTAINER_BIND_SPECS+=("${spec}")
+}
+
+profile_add_container_bind_path() {
+  local path="$1"
+  [[ -n "${path}" ]] || return 0
+  profile_add_container_bind_spec "${path}:${path}"
 }
 
 profile_start() {
@@ -220,7 +256,7 @@ profile_finalize_deep_trace() {
     "${DEEP_TRACE_RAW_DIR}" \
     "${DEEP_TRACE_SUMMARY}" \
     "${DEEP_MANIFEST}" \
-    --tool-path "${ROCPROFV3_PATH}" \
+    --tool-path "${PROFILE_DEEP_TRACE_TOOL_PATH:-${ROCPROFV3_PATH}}" \
     --mode "${PROFILE_MODE}" \
     --command "${command_string}" \
     --status "${status_label}" \
@@ -286,6 +322,82 @@ profile_build_rocprofv3_command() {
   local -a rocprof_launcher=()
   read -r -a rocprof_launcher <<< "${ROCPROFV3_LAUNCHER}"
   PROFILE_ROCPROFV3_CMD=("${rocprof_launcher[@]}" "${rocprof_cmd[@]}")
+}
+
+profile_collect_container_bind_specs() {
+  PROFILE_CONTAINER_BIND_SPECS=()
+
+  profile_add_container_bind_path "${PROFILE_DIR}"
+  profile_add_container_bind_path "${DEEP_PROFILE_DIR}"
+  profile_add_container_bind_path "${DEEP_TRACE_DIR}"
+  profile_add_container_bind_path "${DEEP_TRACE_RAW_DIR}"
+  profile_add_container_bind_path "${LUMI_CONTAINER_WORKDIR}"
+  profile_add_container_bind_path "${PWD}"
+  profile_add_container_bind_path "${SLURM_SUBMIT_DIR:-}"
+
+  if [[ "$#" -ge 1 ]]; then
+    if [[ "$1" == /* ]]; then
+      profile_add_container_bind_path "$(dirname "$1")"
+    fi
+
+    if [[ "$#" -ge 2 && "$2" == /* ]]; then
+      case "$(basename "$1")" in
+        python|python[0-9]*|bash|sh|env)
+          profile_add_container_bind_path "$(dirname "$2")"
+          ;;
+      esac
+    fi
+  fi
+
+  if [[ -n "${LUMI_CONTAINER_BIND_EXTRA}" ]]; then
+    local old_ifs="${IFS}"
+    local entry=""
+    IFS=','
+    for entry in ${LUMI_CONTAINER_BIND_EXTRA}; do
+      profile_add_container_bind_spec "${entry}"
+    done
+    IFS="${old_ifs}"
+  fi
+}
+
+profile_build_container_command() {
+  PROFILE_CONTAINER_CMD=()
+
+  if ! profile_container_enabled; then
+    return 1
+  fi
+
+  if [[ ! -e "${LUMI_CONTAINER_IMAGE}" ]]; then
+    echo "Configured container image does not exist: ${LUMI_CONTAINER_IMAGE}" >&2
+    return 2
+  fi
+
+  if ! profile_container_runtime_available; then
+    echo "Configured container runtime was not found in PATH: ${LUMI_CONTAINER_RUNTIME}" >&2
+    return 2
+  fi
+
+  mkdir -p "${PROFILE_DIR}" "${DEEP_PROFILE_DIR}" "${DEEP_TRACE_DIR}" "${DEEP_TRACE_RAW_DIR}" "${LUMI_CONTAINER_WORKDIR}"
+  profile_collect_container_bind_specs "$@"
+
+  local bind_arg=""
+  local spec=""
+  for spec in "${PROFILE_CONTAINER_BIND_SPECS[@]}"; do
+    if [[ -n "${bind_arg}" ]]; then
+      bind_arg+=",${spec}"
+    else
+      bind_arg="${spec}"
+    fi
+  done
+
+  PROFILE_CONTAINER_CMD=("${LUMI_CONTAINER_RUNTIME}" exec)
+  if [[ -n "${bind_arg}" ]]; then
+    PROFILE_CONTAINER_CMD+=(--bind "${bind_arg}")
+  fi
+  if [[ "${LUMI_CONTAINER_USE_ROCM}" == "1" ]]; then
+    PROFILE_CONTAINER_CMD+=(--rocm)
+  fi
+  PROFILE_CONTAINER_CMD+=(--pwd "${LUMI_CONTAINER_WORKDIR}" "${LUMI_CONTAINER_IMAGE}")
 }
 
 profile_srun_option_takes_value() {
@@ -370,43 +482,122 @@ profile_split_srun_command() {
 }
 
 profile_run_command() {
-  if [[ "${PROFILE_MODE}" != "deep-trace" ]]; then
-    "$@"
-    return $?
+  local deep_trace_enabled=0
+  local status=0
+  PROFILE_DEEP_TRACE_TOOL_PATH=""
+
+  if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
+    deep_trace_enabled=1
+    mkdir -p "${DEEP_TRACE_RAW_DIR}"
   fi
-
-  mkdir -p "${DEEP_TRACE_RAW_DIR}"
-  profile_resolve_rocprofv3_launcher
-
-  if [[ -z "${ROCPROFV3_LAUNCHER}" ]]; then
-    echo "Deep trace requested but rocprofv3 was not found; running without deep trace artifacts." >&2
-    "$@"
-    local status=$?
-    profile_finalize_deep_trace "${status}" "fallback_missing_tool" "$@"
-    return "${status}"
-  fi
-
-  profile_build_rocprofv3_command
 
   if profile_split_srun_command "$@" && [[ "${#PROFILE_SRUN_PAYLOAD_ARGS[@]}" -gt 0 ]]; then
-    local -a traced_srun_cmd=(
-      srun
-      "${PROFILE_SRUN_ARGS[@]}"
-      "${PROFILE_ROCPROFV3_CMD[@]}"
-      --
-      "${PROFILE_SRUN_PAYLOAD_ARGS[@]}"
-    )
-    "${traced_srun_cmd[@]}"
-  else
-    local -a rocprof_cmd=("${PROFILE_ROCPROFV3_CMD[@]}" -- "$@")
-    "${rocprof_cmd[@]}"
-  fi
-  local status=$?
+    if profile_container_enabled; then
+      local container_build_status=0
+      profile_build_container_command "${PROFILE_SRUN_PAYLOAD_ARGS[@]}" || container_build_status=$?
+      if [[ "${container_build_status}" != "0" ]]; then
+        return "${container_build_status}"
+      fi
 
-  if [[ "${status}" == "0" ]]; then
-    profile_finalize_deep_trace "${status}" "completed" "$@"
+      if [[ "${deep_trace_enabled}" == "1" ]]; then
+        PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
+        local -a traced_srun_cmd=(
+          srun
+          "${PROFILE_SRUN_ARGS[@]}"
+          "${PROFILE_CONTAINER_CMD[@]}"
+          "${LUMI_CONTAINER_ROCPROFV3}"
+          --runtime-trace
+          --stats
+          --output-format
+          csv
+          json
+          --output-directory
+          "${DEEP_TRACE_RAW_DIR}"
+          --output-file
+          trace
+        )
+        if [[ -n "${ROCPROFV3_EXTRA_OPTS}" ]]; then
+          local -a rocprof_extra_opts=()
+          read -r -a rocprof_extra_opts <<< "${ROCPROFV3_EXTRA_OPTS}"
+          traced_srun_cmd+=("${rocprof_extra_opts[@]}")
+        fi
+        traced_srun_cmd+=(-- "${PROFILE_SRUN_PAYLOAD_ARGS[@]}")
+        "${traced_srun_cmd[@]}"
+      else
+        local -a container_srun_cmd=(
+          srun
+          "${PROFILE_SRUN_ARGS[@]}"
+          "${PROFILE_CONTAINER_CMD[@]}"
+          "${PROFILE_SRUN_PAYLOAD_ARGS[@]}"
+        )
+        "${container_srun_cmd[@]}"
+      fi
+    else
+      if [[ "${deep_trace_enabled}" == "1" ]]; then
+        echo "Deep trace is supported only for container launches. Set LUMI_CONTAINER_IMAGE to a supported PyTorch container; running without deep trace artifacts." >&2
+        "$@"
+        status=$?
+        profile_finalize_deep_trace "${status}" "fallback_unsupported_host_deep_trace" "$@"
+        return "${status}"
+      fi
+
+      "$@"
+    fi
   else
-    profile_finalize_deep_trace "${status}" "completed_with_command_error" "$@"
+    if profile_container_enabled; then
+      local container_build_status=0
+      profile_build_container_command "$@" || container_build_status=$?
+      if [[ "${container_build_status}" != "0" ]]; then
+        return "${container_build_status}"
+      fi
+
+      if [[ "${deep_trace_enabled}" == "1" ]]; then
+        PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
+        local -a container_rocprof_cmd=(
+          "${PROFILE_CONTAINER_CMD[@]}"
+          "${LUMI_CONTAINER_ROCPROFV3}"
+          --runtime-trace
+          --stats
+          --output-format
+          csv
+          json
+          --output-directory
+          "${DEEP_TRACE_RAW_DIR}"
+          --output-file
+          trace
+        )
+        if [[ -n "${ROCPROFV3_EXTRA_OPTS}" ]]; then
+          local -a rocprof_extra_opts=()
+          read -r -a rocprof_extra_opts <<< "${ROCPROFV3_EXTRA_OPTS}"
+          container_rocprof_cmd+=("${rocprof_extra_opts[@]}")
+        fi
+        container_rocprof_cmd+=(-- "$@")
+        "${container_rocprof_cmd[@]}"
+      else
+        local -a container_cmd=("${PROFILE_CONTAINER_CMD[@]}" "$@")
+        "${container_cmd[@]}"
+      fi
+    else
+      if [[ "${deep_trace_enabled}" == "1" ]]; then
+        echo "Deep trace is supported only for container launches. Set LUMI_CONTAINER_IMAGE to a supported PyTorch container; running without deep trace artifacts." >&2
+        "$@"
+        status=$?
+        profile_finalize_deep_trace "${status}" "fallback_unsupported_host_deep_trace" "$@"
+        return "${status}"
+      fi
+
+      "$@"
+    fi
+  fi
+
+  status=$?
+
+  if [[ "${deep_trace_enabled}" == "1" ]]; then
+    if [[ "${status}" == "0" ]]; then
+      profile_finalize_deep_trace "${status}" "completed" "$@"
+    else
+      profile_finalize_deep_trace "${status}" "completed_with_command_error" "$@"
+    fi
   fi
 
   return "${status}"
