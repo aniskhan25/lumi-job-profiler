@@ -98,6 +98,7 @@ Available functions:
 Deep-trace note:
 
 - `LUMI_PROFILE_MODE=deep-trace` currently applies to the wrapped `profile_run -- <command>` path
+- when the wrapped command starts with `srun`, the hook injects `rocprofv3` inside the `srun` step so tracing attaches to the Slurm task instead of the `srun` launcher
 - manual lifecycle control still manages the lightweight `rocm-smi` sidecar
 
 ## Controls
@@ -107,7 +108,7 @@ The helper is enabled by default. You can override behavior with:
 - `LUMI_PROFILE=0` to disable
 - `PROFILE_INTERVAL=2` to change sampling interval (seconds)
 - `PROFILE_COLLECT_CPU=1` to collect optional host CPU, memory, and load metrics
-- `LUMI_PROFILE_MODE=deep-trace` to keep the lightweight profile and also wrap `profile_run` with `rocprofv3`
+- `LUMI_PROFILE_MODE=deep-trace` to keep the lightweight profile and also run `rocprofv3` for `profile_run`
 - `ROCPROFV3_EXTRA_OPTS="..."` to append extra `rocprofv3` options in deep-trace mode
 - `PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap"` to adjust the sidecar launch
 - `PROFILE_DIR=/scratch/<project_id>/$USER/lumi-profile/$SLURM_JOB_ID` to override the output directory

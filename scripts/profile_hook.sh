@@ -34,6 +34,9 @@ PROFILE_ANALYZED=0
 PROFILE_REPORTED=0
 PROFILER_PID=""
 ROCPROFV3_LAUNCHER=""
+PROFILE_ROCPROFV3_CMD=()
+PROFILE_SRUN_ARGS=()
+PROFILE_SRUN_PAYLOAD_ARGS=()
 
 profile_resolve_collect_command() {
   PROFILE_COLLECT_WARNING=""
@@ -259,22 +262,8 @@ profile_resolve_rocprofv3_launcher() {
   fi
 }
 
-profile_run_command() {
-  if [[ "${PROFILE_MODE}" != "deep-trace" ]]; then
-    "$@"
-    return $?
-  fi
-
-  mkdir -p "${DEEP_TRACE_RAW_DIR}"
-  profile_resolve_rocprofv3_launcher
-
-  if [[ -z "${ROCPROFV3_LAUNCHER}" ]]; then
-    echo "Deep trace requested but rocprofv3 was not found; running without deep trace artifacts." >&2
-    "$@"
-    local status=$?
-    profile_finalize_deep_trace "${status}" "fallback_missing_tool" "$@"
-    return "${status}"
-  fi
+profile_build_rocprofv3_command() {
+  PROFILE_ROCPROFV3_CMD=()
 
   local -a rocprof_cmd=(
     --runtime-trace
@@ -296,9 +285,122 @@ profile_run_command() {
 
   local -a rocprof_launcher=()
   read -r -a rocprof_launcher <<< "${ROCPROFV3_LAUNCHER}"
-  rocprof_cmd=("${rocprof_launcher[@]}" "${rocprof_cmd[@]}")
-  rocprof_cmd+=(-- "$@")
-  "${rocprof_cmd[@]}"
+  PROFILE_ROCPROFV3_CMD=("${rocprof_launcher[@]}" "${rocprof_cmd[@]}")
+}
+
+profile_srun_option_takes_value() {
+  case "$1" in
+    -A|--account|\
+    -c|--cpus-per-task|--cpus-per-gpu|\
+    -C|--constraint|\
+    -D|--chdir|\
+    -e|--error|\
+    -G|--gpus|--gpus-per-node|--gpus-per-task|\
+    -g|--gres|\
+    -i|--input|\
+    -J|--job-name|\
+    -m|--distribution|\
+    --mem|--mem-per-cpu|--mem-per-gpu|\
+    --mpi|\
+    -N|--nodes|\
+    -n|--ntasks|--ntasks-per-node|\
+    -o|--output|\
+    -p|--partition|\
+    -q|--qos|\
+    --reservation|\
+    -t|--time|\
+    --threads-per-core|\
+    -w|--nodelist|\
+    -x|--exclude|\
+    --cpu-bind|--gpu-bind|--hint|--export)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+profile_split_srun_command() {
+  PROFILE_SRUN_ARGS=()
+  PROFILE_SRUN_PAYLOAD_ARGS=()
+
+  if [[ "$#" -eq 0 || "$1" != "srun" ]]; then
+    return 1
+  fi
+
+  shift
+
+  local expecting_value=0
+  local token=""
+
+  while [[ "$#" -gt 0 ]]; do
+    token="$1"
+    shift
+
+    if [[ "${expecting_value}" == "1" ]]; then
+      PROFILE_SRUN_ARGS+=("${token}")
+      expecting_value=0
+      continue
+    fi
+
+    if [[ "${token}" == "--" ]]; then
+      PROFILE_SRUN_ARGS+=("${token}")
+      PROFILE_SRUN_PAYLOAD_ARGS=("$@")
+      return 0
+    fi
+
+    if [[ "${token}" != "-"* || "${token}" == "-" ]]; then
+      PROFILE_SRUN_PAYLOAD_ARGS=("${token}" "$@")
+      return 0
+    fi
+
+    PROFILE_SRUN_ARGS+=("${token}")
+
+    if [[ "${token}" == --*=* ]]; then
+      continue
+    fi
+
+    if profile_srun_option_takes_value "${token}"; then
+      expecting_value=1
+    fi
+  done
+
+  return 0
+}
+
+profile_run_command() {
+  if [[ "${PROFILE_MODE}" != "deep-trace" ]]; then
+    "$@"
+    return $?
+  fi
+
+  mkdir -p "${DEEP_TRACE_RAW_DIR}"
+  profile_resolve_rocprofv3_launcher
+
+  if [[ -z "${ROCPROFV3_LAUNCHER}" ]]; then
+    echo "Deep trace requested but rocprofv3 was not found; running without deep trace artifacts." >&2
+    "$@"
+    local status=$?
+    profile_finalize_deep_trace "${status}" "fallback_missing_tool" "$@"
+    return "${status}"
+  fi
+
+  profile_build_rocprofv3_command
+
+  if profile_split_srun_command "$@" && [[ "${#PROFILE_SRUN_PAYLOAD_ARGS[@]}" -gt 0 ]]; then
+    local -a traced_srun_cmd=(
+      srun
+      "${PROFILE_SRUN_ARGS[@]}"
+      "${PROFILE_ROCPROFV3_CMD[@]}"
+      --
+      "${PROFILE_SRUN_PAYLOAD_ARGS[@]}"
+    )
+    "${traced_srun_cmd[@]}"
+  else
+    local -a rocprof_cmd=("${PROFILE_ROCPROFV3_CMD[@]}" -- "$@")
+    "${rocprof_cmd[@]}"
+  fi
   local status=$?
 
   if [[ "${status}" == "0" ]]; then
