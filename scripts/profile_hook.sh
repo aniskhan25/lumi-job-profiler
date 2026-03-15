@@ -476,7 +476,7 @@ profile_build_rocprofsys_container_command() {
   local runner=""
   if profile_payload_is_python_script "${payload[@]}"; then
     runner="${LUMI_CONTAINER_ROCPROFSYS_PYTHON}"
-    payload_cmd="$(profile_quote_args_for_shell "${payload[@]:1}")"
+    payload_cmd="-- $(profile_quote_args_for_shell "${payload[@]:1}")"
     python_probe="$(profile_quote_args_for_shell "${payload[0]}")"
   else
     runner="${LUMI_CONTAINER_ROCPROFSYS_RUN}"
