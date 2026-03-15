@@ -485,7 +485,8 @@ class ProfileHookTests(unittest.TestCase):
             self.assertEqual(srun_args[2], "singularity")
             self.assertIn("bash", singularity_args)
             self.assertIn("rocprof-sys-python", " ".join(singularity_args))
-            self.assertIn("--output", rocprofsys_args)
+            self.assertNotIn("--output", rocprofsys_args)
+            self.assertEqual(rocprofsys_args[0], "--")
             self.assertIn(str(fake_app), rocprofsys_args)
             self.assertEqual(app_args, ["alpha", "beta"])
 
