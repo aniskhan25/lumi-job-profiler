@@ -14,6 +14,15 @@ DEEP_MANIFEST_SCHEMA_VERSION = 1
 TOP_N = 5
 TRACE_ROW_SUFFIX = "_trace"
 STATS_SUFFIX = "_stats"
+RUNTIME_BUFFER_KEYS = (
+    "kernel_dispatch",
+    "hip_api",
+    "hsa_api",
+    "memory_copy",
+    "marker_api",
+    "rccl_api",
+    "scratch_memory",
+)
 
 
 def iso_timestamp():
@@ -42,6 +51,11 @@ def read_csv_rows(path):
     with open(path, "r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         return list(reader)
+
+
+def read_json(path):
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def classify_artifact(path):
@@ -116,12 +130,40 @@ def summarize_trace_file(path):
     }
 
 
+def summarize_trace_results_json(path):
+    payload = read_json(path)
+    entries = payload.get("rocprofiler-sdk-tool", [])
+    if not isinstance(entries, list) or not entries:
+        return {
+            "path": str(path),
+            "buffer_record_counts": {},
+            "summary_entry_count": 0,
+        }
+
+    entry = entries[0] if isinstance(entries[0], dict) else {}
+    buffer_records = entry.get("buffer_records", {})
+    counts = {}
+    if isinstance(buffer_records, dict):
+        for key in RUNTIME_BUFFER_KEYS:
+            value = buffer_records.get(key, [])
+            counts[key] = len(value) if isinstance(value, list) else None
+
+    summary_entries = entry.get("summary", [])
+    summary_entry_count = len(summary_entries) if isinstance(summary_entries, list) else None
+    return {
+        "path": str(path),
+        "buffer_record_counts": counts,
+        "summary_entry_count": summary_entry_count,
+    }
+
+
 def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
     raw_path = Path(raw_dir)
     artifacts = []
     trace_stats = {}
     stats_summaries = {}
     warnings = []
+    trace_results_summary = None
 
     if not raw_path.exists():
         warnings.append(f"Trace directory does not exist: {raw_path}")
@@ -130,6 +172,9 @@ def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
             if path.is_dir():
                 continue
             artifacts.append(str(path))
+            if path.name == "trace_results.json":
+                trace_results_summary = summarize_trace_results_json(path)
+                continue
             if path.suffix.lower() != ".csv":
                 continue
             category, domain = classify_artifact(path)
@@ -138,19 +183,43 @@ def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
             elif category == "trace":
                 trace_stats[domain] = summarize_trace_file(path)
 
+    runtime_record_counts = {}
+    if trace_results_summary:
+        runtime_record_counts = trace_results_summary.get("buffer_record_counts", {})
+
+    effective_hip_api_rows = trace_stats.get("hip_api", {}).get("row_count")
+    effective_kernel_dispatch_rows = trace_stats.get("kernel_dispatch", {}).get("row_count")
+    effective_memory_copy_rows = trace_stats.get("memory_copy", {}).get("row_count")
+    if effective_hip_api_rows is None:
+        effective_hip_api_rows = runtime_record_counts.get("hip_api")
+    if effective_kernel_dispatch_rows is None:
+        effective_kernel_dispatch_rows = runtime_record_counts.get("kernel_dispatch")
+    if effective_memory_copy_rows is None:
+        effective_memory_copy_rows = runtime_record_counts.get("memory_copy")
+
     preview = {
         "stats_files_discovered": len(stats_summaries),
         "trace_files_discovered": len(trace_stats),
-        "hip_api_trace_rows": trace_stats.get("hip_api", {}).get("row_count"),
-        "kernel_dispatch_trace_rows": trace_stats.get("kernel_dispatch", {}).get("row_count"),
-        "memory_copy_trace_rows": trace_stats.get("memory_copy", {}).get("row_count"),
+        "hip_api_trace_rows": effective_hip_api_rows,
+        "kernel_dispatch_trace_rows": effective_kernel_dispatch_rows,
+        "memory_copy_trace_rows": effective_memory_copy_rows,
         "top_hip_apis": stats_summaries.get("hip_api", {}).get("top", []),
         "top_kernel_dispatches": stats_summaries.get("kernel_dispatch", {}).get("top", []),
         "top_memory_copies": stats_summaries.get("memory_copy", {}).get("top", []),
+        "runtime_record_counts": runtime_record_counts,
     }
 
     if not artifacts:
         warnings.append("No rocprofv3 artifacts were discovered.")
+    elif trace_results_summary and runtime_record_counts and not any(
+        (value or 0) > 0 for value in runtime_record_counts.values() if value is not None
+    ):
+        warnings.append(
+            "rocprofv3 produced metadata artifacts but captured no runtime events. "
+            "This usually indicates a runtime attachment or tool initialization failure on the target environment."
+        )
+        if status == "completed":
+            status = "completed_without_runtime_events"
 
     return {
         "deep_trace_schema_version": TRACE_SCHEMA_VERSION,
@@ -167,6 +236,7 @@ def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
         "artifacts": artifacts,
         "trace_stats": trace_stats,
         "stats": stats_summaries,
+        "trace_results": trace_results_summary,
         "preview": preview,
         "warnings": warnings,
     }

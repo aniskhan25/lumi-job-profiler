@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 import shutil
 import tempfile
@@ -91,6 +92,52 @@ class GenerateReportTests(unittest.TestCase):
         self.assertIn("void gemm_kernel", report["markdown"])
         self.assertIn("<h2>Deep Trace</h2>", report["html"])
         self.assertIn("hipLaunchKernel", report["html"])
+
+    def test_report_surfaces_empty_runtime_trace_warning(self):
+        summary = self.summarizer.summarize_logs(self.temp_dir)
+        analysis = self.analyzer.analyze_summary(summary)
+        deep_trace_dir = pathlib.Path(self.temp_dir) / "deep_profile" / "trace" / "raw"
+        deep_trace_dir.mkdir(parents=True)
+        (deep_trace_dir / "trace_agent_info.csv").write_text("Agent_Id,Name\n0,gfx90a\n", encoding="utf-8")
+        (deep_trace_dir / "trace_results.json").write_text(
+            json.dumps(
+                {
+                    "rocprofiler-sdk-tool": [
+                        {
+                            "buffer_records": {
+                                "kernel_dispatch": [],
+                                "hip_api": [],
+                                "hsa_api": [],
+                                "memory_copy": [],
+                                "marker_api": [],
+                                "rccl_api": [],
+                                "scratch_memory": [],
+                            },
+                            "summary": [],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        deep_manifest = self.deep_trace.build_deep_manifest(
+            self.deep_trace.build_trace_summary(
+                raw_dir=deep_trace_dir,
+                tool_path="/usr/bin/rocprofv3",
+                mode="deep-trace",
+                command="srun python3 demo.py",
+                status="completed",
+                exit_code=0,
+            ),
+            pathlib.Path(self.temp_dir) / "deep_profile" / "trace" / "summary.json",
+            pathlib.Path(self.temp_dir) / "deep_profile" / "deep_manifest.json",
+        )
+
+        report = self.reporter.generate_report(summary, analysis, deep_manifest)
+
+        self.assertIn("completed_without_runtime_events", report["markdown"])
+        self.assertIn("captured no runtime events", report["markdown"])
+        self.assertIn("captured no runtime events", report["html"])
 
 
 if __name__ == "__main__":

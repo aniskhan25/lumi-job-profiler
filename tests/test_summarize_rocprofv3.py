@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 import tempfile
 import unittest
@@ -59,6 +60,45 @@ class SummarizeRocprofv3Tests(unittest.TestCase):
         self.assertEqual(manifest["artifacts"]["trace_summary"], str(summary_path))
         self.assertEqual(manifest["artifacts"]["deep_manifest"], str(manifest_path))
         self.assertEqual(manifest["trace_summary_preview"]["top_hip_apis"][0]["name"], "hipLaunchKernel")
+
+    def test_json_only_trace_with_empty_runtime_buffers_is_reported_explicitly(self):
+        payload = {
+            "rocprofiler-sdk-tool": [
+                {
+                    "buffer_records": {
+                        "kernel_dispatch": [],
+                        "hip_api": [],
+                        "hsa_api": [],
+                        "memory_copy": [],
+                        "marker_api": [],
+                        "rccl_api": [],
+                        "scratch_memory": [],
+                    },
+                    "summary": [],
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory(prefix="lumi-profiler-rocprof-json-") as tmpdir:
+            raw_dir = pathlib.Path(tmpdir)
+            (raw_dir / "trace_agent_info.csv").write_text("Agent_Id,Name\n0,gfx90a\n", encoding="utf-8")
+            (raw_dir / "trace_results.json").write_text(json.dumps(payload), encoding="utf-8")
+
+            summary = self.module.build_trace_summary(
+                raw_dir=raw_dir,
+                tool_path="/usr/bin/rocprofv3",
+                mode="deep-trace",
+                command="srun python3 demo.py",
+                status="completed",
+                exit_code=0,
+            )
+
+        self.assertEqual(summary["status"], "completed_without_runtime_events")
+        self.assertEqual(summary["preview"]["kernel_dispatch_trace_rows"], 0)
+        self.assertEqual(summary["preview"]["hip_api_trace_rows"], 0)
+        self.assertEqual(summary["preview"]["memory_copy_trace_rows"], 0)
+        self.assertIn("runtime_record_counts", summary["preview"])
+        self.assertIn("captured no runtime events", summary["warnings"][0])
 
 
 if __name__ == "__main__":
