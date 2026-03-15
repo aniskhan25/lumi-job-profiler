@@ -8,6 +8,7 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 - `templates/sbatch_profiled.sh`: example Slurm job using the profiling helper
 - `scripts/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
 - `scripts/summarize_rocprofv3.py`: best-effort parser that generates deep-trace summaries and manifests
+- `scripts/summarize_rocprofsys.py`: best-effort parser that generates deep-system summaries and manifests
 - `scripts/analyze_summary.py`: rule-based analyzer that generates `analysis.json`
 - `scripts/generate_report.py`: report generator that emits `report.md` and `report.html`
 - `scripts/demo_pytorch_rocm.py`: a PyTorch ROCm demo workload to generate GPU activity
@@ -109,7 +110,8 @@ Deep-trace note:
 - `LUMI_PROFILE_MODE=deep-trace` currently applies to the wrapped `profile_run -- <command>` path
 - deep-trace is supported for container launches configured with `LUMI_CONTAINER_IMAGE`
 - when the wrapped command starts with `srun`, the hook injects `singularity exec ... rocprofv3` inside the `srun` step so tracing attaches to the Slurm task instead of the `srun` launcher
-- host-side deep-trace with the retiring `pytorch/2.7` module stack is treated as unsupported
+- `LUMI_PROFILE_MODE=deep-system` runs `rocprofiler-systems` inside the container and writes perfetto-style system traces
+- host-side deep profiling with the retiring `pytorch/2.7` module stack is treated as unsupported
 - manual lifecycle control still manages the lightweight `rocm-smi` sidecar
 
 ## Controls
@@ -120,10 +122,13 @@ The helper is enabled by default. You can override behavior with:
 - `PROFILE_INTERVAL=2` to change sampling interval (seconds)
 - `PROFILE_COLLECT_CPU=1` to collect optional host CPU, memory, and load metrics
 - `LUMI_PROFILE_MODE=deep-trace` to keep the lightweight profile and also run `rocprofv3` for `profile_run`
+- `LUMI_PROFILE_MODE=deep-system` to keep the lightweight profile and also run `rocprofiler-systems` for `profile_run`
 - `LUMI_CONTAINER_IMAGE=/path/to/container.sif` to run the profiled payload inside a container
 - `LUMI_CONTAINER_RUNTIME=singularity` to choose the container runtime used by the hook
 - `LUMI_CONTAINER_BIND_EXTRA="/path/a:/path/a,/path/b:/path/b"` to add extra bind mounts for container runs
 - `ROCPROFV3_EXTRA_OPTS="..."` to append extra `rocprofv3` options in deep-trace mode
+- `ROCPROFSYS_INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container` to enable `deep-system`
+- `ROCPROFSYS_EXTRA_OPTS="..."` to append extra `rocprof-sys` options in deep-system mode
 - `PROFILER_SRUN_OPTS="--ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap"` to adjust the sidecar launch
 - `PROFILE_DIR=/scratch/<project_id>/$USER/lumi-profile/$SLURM_JOB_ID` to override the output directory
 
@@ -138,6 +143,15 @@ Deep-trace example:
 ```bash
 LUMI_PROFILE_MODE=deep-trace \
 LUMI_CONTAINER_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif \
+sbatch your_job.sh
+```
+
+Deep-system example:
+
+```bash
+LUMI_PROFILE_MODE=deep-system \
+LUMI_CONTAINER_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif \
+ROCPROFSYS_INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
 sbatch your_job.sh
 ```
 
@@ -222,7 +236,15 @@ When `LUMI_PROFILE_MODE=deep-trace` is set and `rocprofv3` is available, the pro
 /scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/trace/raw/
 ```
 
-Deep-trace mode keeps the existing lightweight artifacts and adds `rocprofv3` trace artifacts for the wrapped command. The supported path is container-first: the hook runs the profiled payload inside `LUMI_CONTAINER_IMAGE` and launches `rocprofv3` inside that container. If the container or `rocprofv3` is unavailable, the job still runs and `deep_manifest.json` records the fallback.
+When `LUMI_PROFILE_MODE=deep-system` is set and `ROCPROFSYS_INSTALL_PREFIX` points to a working install, the profiler writes:
+
+```text
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/deep_manifest.json
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/system/summary.json
+/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/system/raw/
+```
+
+Deep profiling keeps the existing lightweight artifacts and adds either `rocprofv3` trace artifacts (`deep-trace`) or `rocprofiler-systems` artifacts (`deep-system`) for the wrapped command. The supported path is container-first: the hook runs the profiled payload inside `LUMI_CONTAINER_IMAGE` and launches the selected tool inside that container. If the container or the requested deep tool is unavailable, the job still runs and `deep_manifest.json` records the fallback.
 
 `summary.json` contains:
 

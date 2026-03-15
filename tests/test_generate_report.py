@@ -11,6 +11,7 @@ SUMMARIZER_PATH = REPO_ROOT / "scripts" / "summarize_rocm_smi.py"
 ANALYZER_PATH = REPO_ROOT / "scripts" / "analyze_summary.py"
 REPORT_PATH = REPO_ROOT / "scripts" / "generate_report.py"
 DEEP_TRACE_PATH = REPO_ROOT / "scripts" / "summarize_rocprofv3.py"
+DEEP_SYSTEM_PATH = REPO_ROOT / "scripts" / "summarize_rocprofsys.py"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005028.log"
 CPU_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005029_cpu.log"
 DEEP_TRACE_FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "rocprofv3_trace" / "raw"
@@ -30,6 +31,7 @@ class GenerateReportTests(unittest.TestCase):
         self.analyzer = load_module(ANALYZER_PATH, "analyze_summary")
         self.reporter = load_module(REPORT_PATH, "generate_report")
         self.deep_trace = load_module(DEEP_TRACE_PATH, "summarize_rocprofv3")
+        self.deep_system = load_module(DEEP_SYSTEM_PATH, "summarize_rocprofsys")
         self.temp_dir = tempfile.mkdtemp(prefix="lumi-profiler-report-")
         shutil.copy(FIXTURE_PATH, pathlib.Path(self.temp_dir) / "nid005028.log")
 
@@ -138,6 +140,33 @@ class GenerateReportTests(unittest.TestCase):
         self.assertIn("completed_without_runtime_events", report["markdown"])
         self.assertIn("captured no runtime events", report["markdown"])
         self.assertIn("captured no runtime events", report["html"])
+
+    def test_report_includes_deep_system_section(self):
+        summary = self.summarizer.summarize_logs(self.temp_dir)
+        analysis = self.analyzer.analyze_summary(summary)
+        system_dir = pathlib.Path(self.temp_dir) / "deep_profile" / "system" / "raw" / "rocprofsys-python-output" / "2026-03-16_00.04"
+        system_dir.mkdir(parents=True)
+        (system_dir / "perfetto-trace-32409.proto").write_text("perfetto", encoding="utf-8")
+        (system_dir / "metadata-32409.json").write_text("{}", encoding="utf-8")
+        (system_dir / "functions-32409.json").write_text("{}", encoding="utf-8")
+        deep_manifest = self.deep_system.build_deep_manifest(
+            self.deep_system.build_system_summary(
+                raw_dir=pathlib.Path(self.temp_dir) / "deep_profile" / "system" / "raw",
+                tool_path="/tmp/rocprof-sys-python",
+                mode="deep-system",
+                command="srun python3 demo.py",
+                status="completed",
+                exit_code=0,
+            ),
+            pathlib.Path(self.temp_dir) / "deep_profile" / "system" / "summary.json",
+            pathlib.Path(self.temp_dir) / "deep_profile" / "deep_manifest.json",
+        )
+
+        report = self.reporter.generate_report(summary, analysis, deep_manifest)
+
+        self.assertIn("## Deep System", report["markdown"])
+        self.assertIn("Perfetto trace files: 1", report["markdown"])
+        self.assertIn("<h2>Deep System</h2>", report["html"])
 
 
 if __name__ == "__main__":

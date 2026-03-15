@@ -157,6 +157,51 @@ def deep_trace_lines(deep_manifest):
     return lines
 
 
+def deep_system_lines(deep_manifest):
+    if not deep_manifest:
+        return []
+
+    preview = deep_manifest.get("trace_summary_preview", {})
+    lines = [
+        f"- Mode: {deep_manifest.get('mode', 'n/a')}",
+        f"- Status: {deep_manifest.get('status', 'n/a')}",
+        f"- Tool: {deep_manifest.get('tool', {}).get('path') or 'n/a'}",
+        f"- Command: {deep_manifest.get('command') or 'n/a'}",
+        f"- Raw output directory: {deep_manifest.get('artifacts', {}).get('trace_raw_dir') or 'n/a'}",
+        f"- System summary: {deep_manifest.get('artifacts', {}).get('trace_summary') or 'n/a'}",
+        f"- Perfetto trace files: {fmt_num(preview.get('perfetto_trace_files'))}",
+        f"- Metadata files: {fmt_num(preview.get('metadata_files'))}",
+        f"- Functions files: {fmt_num(preview.get('functions_files'))}",
+    ]
+
+    perfetto_sample = preview.get("perfetto_trace_sample", [])
+    if perfetto_sample:
+        lines.append(f"- Perfetto sample: {', '.join(perfetto_sample[:3])}")
+
+    warnings = deep_manifest.get("warnings", [])
+    if warnings:
+        rendered = "; ".join(warnings)
+        lines.append(f"- Warnings: {rendered}")
+
+    return lines
+
+
+def deep_profile_title(deep_manifest):
+    if not deep_manifest:
+        return "Deep Profile"
+    if deep_manifest.get("mode") == "deep-system":
+        return "Deep System"
+    return "Deep Trace"
+
+
+def deep_profile_lines(deep_manifest):
+    if not deep_manifest:
+        return []
+    if deep_manifest.get("mode") == "deep-system":
+        return deep_system_lines(deep_manifest)
+    return deep_trace_lines(deep_manifest)
+
+
 def build_markdown(summary, analysis, deep_manifest=None):
     job = summary.get("job", {})
     job_metrics = summary.get("job_metrics", {})
@@ -246,11 +291,11 @@ def build_markdown(summary, analysis, deep_manifest=None):
         lines.extend(
             [
                 "",
-                "## Deep Trace",
+                f"## {deep_profile_title(deep_manifest)}",
                 "",
             ]
         )
-        lines.extend(deep_trace_lines(deep_manifest))
+        lines.extend(deep_profile_lines(deep_manifest))
 
     return "\n".join(lines) + "\n"
 
@@ -271,9 +316,9 @@ def render_html(summary, analysis, deep_manifest=None):
     if deep_manifest:
         deep_trace_items = "".join(
             f"<li>{html.escape(line[2:] if line.startswith('- ') else line)}</li>"
-            for line in deep_trace_lines(deep_manifest)
+            for line in deep_profile_lines(deep_manifest)
         )
-        deep_trace_html = f"<h2>Deep Trace</h2><ul>{deep_trace_items}</ul>"
+        deep_trace_html = f"<h2>{html.escape(deep_profile_title(deep_manifest))}</h2><ul>{deep_trace_items}</ul>"
 
     if rows:
         table_rows = "".join(
