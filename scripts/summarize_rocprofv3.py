@@ -71,7 +71,15 @@ def classify_artifact(path):
         domain = stem
     if domain.startswith("trace_"):
         domain = domain[len("trace_") :]
+    domain = canonical_domain(domain)
     return category, domain
+
+
+def canonical_domain(domain):
+    aliases = {
+        "kernel": "kernel_dispatch",
+    }
+    return aliases.get(domain, domain)
 
 
 def normalize_top_row(row):

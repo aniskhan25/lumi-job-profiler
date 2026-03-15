@@ -100,6 +100,30 @@ class SummarizeRocprofv3Tests(unittest.TestCase):
         self.assertIn("runtime_record_counts", summary["preview"])
         self.assertIn("captured no runtime events", summary["warnings"][0])
 
+    def test_kernel_trace_alias_maps_to_kernel_dispatch_preview(self):
+        with tempfile.TemporaryDirectory(prefix="lumi-profiler-rocprof-kernel-") as tmpdir:
+            raw_dir = pathlib.Path(tmpdir)
+            (raw_dir / "trace_kernel_trace.csv").write_text(
+                "StartNs,EndNs,KernelName\n0,5000,void gemm_kernel\n",
+                encoding="utf-8",
+            )
+            (raw_dir / "trace_hip_api_trace.csv").write_text(
+                "StartNs,EndNs,Function\n0,1000,hipLaunchKernel\n",
+                encoding="utf-8",
+            )
+
+            summary = self.module.build_trace_summary(
+                raw_dir=raw_dir,
+                tool_path="/usr/bin/rocprofv3",
+                mode="deep-trace",
+                command="srun python3 demo.py",
+                status="completed",
+                exit_code=0,
+            )
+
+        self.assertEqual(summary["preview"]["kernel_dispatch_trace_rows"], 1)
+        self.assertEqual(summary["trace_stats"]["kernel_dispatch"]["row_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
