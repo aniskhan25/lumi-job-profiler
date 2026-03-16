@@ -31,7 +31,6 @@ DEEP_SYSTEM_SUMMARY="${DEEP_SYSTEM_SUMMARY:-${DEEP_SYSTEM_DIR}/summary.json}"
 DEEP_MANIFEST="${DEEP_MANIFEST:-${DEEP_PROFILE_DIR}/deep_manifest.json}"
 ROCPROFV3_PATH="${ROCPROFV3_PATH:-$(command -v rocprofv3 2>/dev/null || true)}"
 ROCPROFV3_EXTRA_OPTS="${ROCPROFV3_EXTRA_OPTS:-}"
-ROCPROFV3_PYTHON="${ROCPROFV3_PYTHON:-/usr/bin/python3}"
 LUMI_CONTAINER_RUNTIME="${LUMI_CONTAINER_RUNTIME:-singularity}"
 LUMI_CONTAINER_IMAGE="${LUMI_CONTAINER_IMAGE:-}"
 LUMI_CONTAINER_USE_ROCM="${LUMI_CONTAINER_USE_ROCM:-1}"
@@ -47,8 +46,8 @@ PROFILE_SUMMARIZED=0
 PROFILE_ANALYZED=0
 PROFILE_REPORTED=0
 PROFILER_PID=""
-ROCPROFV3_LAUNCHER=""
-PROFILE_ROCPROFV3_CMD=()
+PROFILE_DEEP_TOOL_CMD=()
+PROFILE_ROCPROFV3_TRACE_ARGS=()
 PROFILE_CONTAINER_CMD=()
 PROFILE_CONTAINER_BIND_SPECS=()
 PROFILE_SRUN_ARGS=()
@@ -92,18 +91,6 @@ profile_resolve_collect_command() {
   else
     PROFILE_COLLECT_COMMAND="${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
   fi
-}
-
-profile_is_python_script() {
-  local path="$1"
-  local first_line=""
-
-  if [[ ! -r "${path}" ]]; then
-    return 1
-  fi
-
-  IFS= read -r first_line < "${path}" || true
-  [[ "${path}" == *.py || "${first_line}" == '#!'*python* ]]
 }
 
 profile_container_enabled() {
@@ -297,42 +284,9 @@ profile_finalize_deep_profile() {
   echo "Deep trace manifest: ${DEEP_MANIFEST}"
 }
 
-profile_resolve_rocprofv3_launcher() {
-  ROCPROFV3_LAUNCHER=""
-
-  if [[ -z "${ROCPROFV3_PATH}" ]]; then
-    return 0
-  fi
-
-  local resolved_path="${ROCPROFV3_PATH}"
-  if command -v readlink >/dev/null 2>&1; then
-    local resolved_candidate=""
-    resolved_candidate="$(readlink -f "${ROCPROFV3_PATH}" 2>/dev/null || true)"
-    if [[ -n "${resolved_candidate}" ]]; then
-      resolved_path="${resolved_candidate}"
-    fi
-  fi
-
-  if [[ ! -e "${resolved_path}" ]]; then
-    ROCPROFV3_PATH=""
-    return 0
-  fi
-
-  if profile_is_python_script "${resolved_path}"; then
-    if [[ ! -x "${ROCPROFV3_PYTHON}" ]]; then
-      ROCPROFV3_PATH=""
-      return 0
-    fi
-    ROCPROFV3_LAUNCHER="${ROCPROFV3_PYTHON} ${resolved_path}"
-  else
-    ROCPROFV3_LAUNCHER="${resolved_path}"
-  fi
-}
-
-profile_build_rocprofv3_command() {
-  PROFILE_ROCPROFV3_CMD=()
-
-  local -a rocprof_cmd=(
+profile_build_rocprofv3_trace_args() {
+  PROFILE_ROCPROFV3_TRACE_ARGS=(
+    "${LUMI_CONTAINER_ROCPROFV3}"
     --runtime-trace
     --stats
     --output-format
@@ -347,12 +301,8 @@ profile_build_rocprofv3_command() {
   if [[ -n "${ROCPROFV3_EXTRA_OPTS}" ]]; then
     local -a rocprof_extra_opts=()
     read -r -a rocprof_extra_opts <<< "${ROCPROFV3_EXTRA_OPTS}"
-    rocprof_cmd+=("${rocprof_extra_opts[@]}")
+    PROFILE_ROCPROFV3_TRACE_ARGS+=("${rocprof_extra_opts[@]}")
   fi
-
-  local -a rocprof_launcher=()
-  read -r -a rocprof_launcher <<< "${ROCPROFV3_LAUNCHER}"
-  PROFILE_ROCPROFV3_CMD=("${rocprof_launcher[@]}" "${rocprof_cmd[@]}")
 }
 
 profile_collect_container_bind_specs() {
@@ -502,7 +452,7 @@ profile_build_rocprofsys_container_command() {
   script+="$(printf '%q' "${runner}") ${extra_opts}${output_opts}${payload_cmd}"$'\n'
 
   PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${runner}"
-  PROFILE_ROCPROFV3_CMD=("${PROFILE_CONTAINER_CMD[@]}" bash -lc "${script}")
+  PROFILE_DEEP_TOOL_CMD=("${PROFILE_CONTAINER_CMD[@]}" bash -lc "${script}")
 }
 
 profile_srun_option_takes_value() {
@@ -612,28 +562,13 @@ profile_run_command() {
         )
         if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
           PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
-          traced_srun_cmd+=(
-            "${PROFILE_CONTAINER_CMD[@]}"
-            "${LUMI_CONTAINER_ROCPROFV3}"
-            --runtime-trace
-            --stats
-            --output-format
-            csv
-            json
-            --output-directory
-            "${DEEP_TRACE_RAW_DIR}"
-            --output-file
-            trace
-          )
-          if [[ -n "${ROCPROFV3_EXTRA_OPTS}" ]]; then
-            local -a rocprof_extra_opts=()
-            read -r -a rocprof_extra_opts <<< "${ROCPROFV3_EXTRA_OPTS}"
-            traced_srun_cmd+=("${rocprof_extra_opts[@]}")
-          fi
+          traced_srun_cmd+=("${PROFILE_CONTAINER_CMD[@]}")
+          profile_build_rocprofv3_trace_args
+          traced_srun_cmd+=("${PROFILE_ROCPROFV3_TRACE_ARGS[@]}")
           traced_srun_cmd+=(-- "${PROFILE_SRUN_PAYLOAD_ARGS[@]}")
         else
           profile_build_rocprofsys_container_command "${PROFILE_SRUN_PAYLOAD_ARGS[@]}" || return $?
-          traced_srun_cmd+=("${PROFILE_ROCPROFV3_CMD[@]}")
+          traced_srun_cmd+=("${PROFILE_DEEP_TOOL_CMD[@]}")
         fi
         "${traced_srun_cmd[@]}"
       else
@@ -667,29 +602,14 @@ profile_run_command() {
       if [[ "${deep_profile_enabled}" == "1" ]]; then
         if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
           PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
-          local -a container_rocprof_cmd=(
-            "${PROFILE_CONTAINER_CMD[@]}"
-            "${LUMI_CONTAINER_ROCPROFV3}"
-            --runtime-trace
-            --stats
-            --output-format
-            csv
-            json
-            --output-directory
-            "${DEEP_TRACE_RAW_DIR}"
-            --output-file
-            trace
-          )
-          if [[ -n "${ROCPROFV3_EXTRA_OPTS}" ]]; then
-            local -a rocprof_extra_opts=()
-            read -r -a rocprof_extra_opts <<< "${ROCPROFV3_EXTRA_OPTS}"
-            container_rocprof_cmd+=("${rocprof_extra_opts[@]}")
-          fi
+          local -a container_rocprof_cmd=("${PROFILE_CONTAINER_CMD[@]}")
+          profile_build_rocprofv3_trace_args
+          container_rocprof_cmd+=("${PROFILE_ROCPROFV3_TRACE_ARGS[@]}")
           container_rocprof_cmd+=(-- "$@")
           "${container_rocprof_cmd[@]}"
         else
           profile_build_rocprofsys_container_command "$@" || return $?
-          "${PROFILE_ROCPROFV3_CMD[@]}"
+          "${PROFILE_DEEP_TOOL_CMD[@]}"
         fi
       else
         local -a container_cmd=("${PROFILE_CONTAINER_CMD[@]}" "$@")
