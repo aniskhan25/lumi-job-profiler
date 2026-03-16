@@ -2,13 +2,11 @@
 
 # Shared defaults for opt-in job profiling on LUMI.
 _profile_hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_profile_user="${USER:-${LOGNAME:-unknown}}"
-_profile_job_id="${SLURM_JOB_ID:-manual}"
 
 PROFILE_ENABLE="${LUMI_PROFILE:-1}"
 PROFILE_MODE="${LUMI_PROFILE_MODE:-light}"
 PROFILE_INTERVAL="${PROFILE_INTERVAL:-2}"
-PROFILE_DIR="${PROFILE_DIR:-/scratch/project_462000131/${_profile_user}/lumi-profile/${_profile_job_id}}"
+PROFILE_DIR="${PROFILE_DIR:-/scratch/project_462000131/${USER}/lumi-profile/${SLURM_JOB_ID:-manual}}"
 PROFILE_COLLECT_CPU="${PROFILE_COLLECT_CPU:-0}"
 PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap}"
 SUMMARIZER="${SUMMARIZER:-${_profile_hook_dir}/summarize_rocm_smi.py}"
@@ -17,10 +15,7 @@ REPORT_GENERATOR="${REPORT_GENERATOR:-${_profile_hook_dir}/generate_report.py}"
 ROCPROFV3_SUMMARIZER="${ROCPROFV3_SUMMARIZER:-${_profile_hook_dir}/summarize_rocprofv3.py}"
 ROCPROFSYS_SUMMARIZER="${ROCPROFSYS_SUMMARIZER:-${_profile_hook_dir}/summarize_rocprofsys.py}"
 PROFILE_LOG_SCHEMA_VERSION="${PROFILE_LOG_SCHEMA_VERSION:-1}"
-PROFILE_COLLECT_COMMAND_DEFAULT="rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks"
-PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-${PROFILE_COLLECT_COMMAND_DEFAULT}}"
-PROFILE_COLLECT_WARNING=""
-ROCM_SMI_PYTHON="${ROCM_SMI_PYTHON:-/usr/bin/python3}"
+PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks}"
 DEEP_PROFILE_DIR="${DEEP_PROFILE_DIR:-${PROFILE_DIR}/deep_profile}"
 DEEP_TRACE_DIR="${DEEP_TRACE_DIR:-${DEEP_PROFILE_DIR}/trace}"
 DEEP_TRACE_RAW_DIR="${DEEP_TRACE_RAW_DIR:-${DEEP_TRACE_DIR}/raw}"
@@ -56,54 +51,14 @@ PROFILE_DEEP_TRACE_TOOL_PATH=""
 . "${_profile_hook_dir}/lib/profile_deep_trace.sh"
 . "${_profile_hook_dir}/lib/profile_deep_system.sh"
 
-profile_resolve_collect_command() {
-  PROFILE_COLLECT_WARNING=""
-
-  if [[ "${PROFILE_COLLECT_COMMAND}" != "${PROFILE_COLLECT_COMMAND_DEFAULT}" ]]; then
-    return 0
-  fi
-
-  local rocm_smi_path=""
-  if ! rocm_smi_path="$(command -v rocm-smi 2>/dev/null)"; then
-    PROFILE_COLLECT_WARNING="rocm-smi was not found in PATH"
-    return 0
-  fi
-
-  local resolved_path="${rocm_smi_path}"
-  if command -v readlink >/dev/null 2>&1; then
-    local resolved_candidate=""
-    resolved_candidate="$(readlink -f "${rocm_smi_path}" 2>/dev/null || true)"
-    if [[ -n "${resolved_candidate}" ]]; then
-      resolved_path="${resolved_candidate}"
-    fi
-  fi
-
-  if [[ ! -e "${resolved_path}" ]]; then
-    PROFILE_COLLECT_WARNING="rocm-smi resolved to a missing path: ${resolved_path}"
-    return 0
-  fi
-
-  if [[ "${resolved_path}" == *.py ]]; then
-    local rocm_smi_python="${ROCM_SMI_PYTHON}"
-    if [[ ! -x "${rocm_smi_python}" ]]; then
-      PROFILE_COLLECT_WARNING="Configured ROCm SMI Python interpreter is not executable: ${rocm_smi_python}"
-      return 0
-    fi
-    PROFILE_COLLECT_COMMAND="${rocm_smi_python} ${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
-  else
-    PROFILE_COLLECT_COMMAND="${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
-  fi
-}
-
 profile_start() {
   if [[ "${PROFILE_ENABLE}" != "1" || "${PROFILE_STARTED}" == "1" ]]; then
     return 0
   fi
 
-  profile_resolve_collect_command
   mkdir -p "${PROFILE_DIR}"
   rm -f "${PROFILE_DIR}/STOP"
-  export PROFILE_DIR PROFILE_INTERVAL PROFILE_LOG_SCHEMA_VERSION PROFILE_COLLECT_COMMAND PROFILE_COLLECT_CPU PROFILE_COLLECT_WARNING
+  export PROFILE_DIR PROFILE_INTERVAL PROFILE_LOG_SCHEMA_VERSION PROFILE_COLLECT_COMMAND PROFILE_COLLECT_CPU
   PROFILE_SUMMARIZED=0
   PROFILE_ANALYZED=0
   PROFILE_REPORTED=0
@@ -117,9 +72,6 @@ profile_start() {
     echo "# profile_log_schema_version=${PROFILE_LOG_SCHEMA_VERSION}" >> "${out}"
     echo "# profile_collect_command=${PROFILE_COLLECT_COMMAND}" >> "${out}"
     echo "# profile_collect_cpu=${PROFILE_COLLECT_CPU}" >> "${out}"
-    if [[ -n "${PROFILE_COLLECT_WARNING}" ]]; then
-      echo "# profile_collect_warning=${PROFILE_COLLECT_WARNING}" >> "${out}"
-    fi
     while [[ ! -f "${PROFILE_DIR}/STOP" ]]; do
       ts=$(date +%s)
       echo "ts=${ts}" >> "${out}"
