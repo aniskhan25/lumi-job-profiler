@@ -28,7 +28,7 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 1. Clone the repo on shared scratch:
 
 ```bash
-cd /scratch/<project_id>/<user>
+cd /scratch/<project_id>/$USER
 git clone https://github.com/aniskhan25/lumi-job-profiler.git
 cd lumi-job-profiler
 ```
@@ -36,7 +36,7 @@ cd lumi-job-profiler
 2. In your existing `sbatch` script, add the hook after your module loads:
 
 ```bash
-source /scratch/<project_id>/<user>/lumi-job-profiler/scripts/profile_hook.sh
+source /scratch/<project_id>/$USER/lumi-job-profiler/scripts/profile_hook.sh
 ```
 
 For containerized PyTorch jobs, also export the container image before `profile_run`:
@@ -61,7 +61,7 @@ sbatch your_job.sh
 5. After the job completes, find logs and summary here:
 
 ```
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/
   <node>.log
   summary.json
   analysis.json
@@ -76,14 +76,14 @@ sbatch your_job.sh
 
 ## Example Template
 
-If you want a complete working example, use [templates/sbatch_profiled.sh](/Users/anisrahm/Documents/lumi-job-profiler/templates/sbatch_profiled.sh).
+If you want a complete working example, use `templates/sbatch_profiled.sh`.
 
 ## Manual Lifecycle Control
 
 If your job has multiple phases and you only want to profile part of it, use the lifecycle functions directly:
 
 ```bash
-source /scratch/<project_id>/<user>/lumi-job-profiler/scripts/profile_hook.sh
+source /scratch/<project_id>/$USER/lumi-job-profiler/scripts/profile_hook.sh
 trap profile_cleanup EXIT
 
 export LUMI_CONTAINER_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif
@@ -199,7 +199,7 @@ If `PROFILE_COLLECT_CPU=1` is set, the profiler also captures lightweight host m
 The profiler writes raw samples to per-node log files:
 
 ```text
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/<node>.log
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/<node>.log
 ```
 
 Each raw log includes metadata headers such as:
@@ -212,36 +212,36 @@ Each raw log includes metadata headers such as:
 At the end of profiling, these raw samples are summarized into:
 
 ```text
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/summary.json
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/summary.json
 ```
 
 The profiler also writes a rule-based analysis artifact:
 
 ```text
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/analysis.json
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/analysis.json
 ```
 
 The profiler also generates user-facing reports:
 
 ```text
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/report.md
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/report.html
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/report.md
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/report.html
 ```
 
 When `LUMI_PROFILE_MODE=deep-trace` is set and `rocprofv3` is available, the profiler also writes:
 
 ```text
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/deep_manifest.json
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/trace/summary.json
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/trace/raw/
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/deep_profile/deep_manifest.json
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/deep_profile/trace/summary.json
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/deep_profile/trace/raw/
 ```
 
 When `LUMI_PROFILE_MODE=deep-system` is set and `ROCPROFSYS_INSTALL_PREFIX` points to a working install, the profiler writes:
 
 ```text
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/deep_manifest.json
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/system/summary.json
-/scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/system/raw/
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/deep_profile/deep_manifest.json
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/deep_profile/system/summary.json
+/scratch/<project_id>/$USER/lumi-profile/<job_id>/deep_profile/system/raw/
 ```
 
 For `deep-system`, the main artifact is `perfetto-trace-*.proto` under `deep_profile/system/raw/rocprofsys-*/.../`. Open that file in [Perfetto UI](https://ui.perfetto.dev) for timeline analysis.
@@ -300,6 +300,80 @@ The parser is best‑effort and tolerant of missing fields.
 - lightweight textual utilization bars
 - findings, recommendations, and documentation links where available
 - deep-trace artifact status and top `rocprofv3` entries when deep mode is used
+
+## Appendix: rocprofiler-systems Setup on LUMI
+
+`rocprofiler-systems` is not preinstalled in the tested LUMI environment used by this repo. The supported `deep-system` path assumes you first build a working install inside the same multitorch container used for profiling.
+
+Helper scripts:
+
+- Build the tool:
+  - `scripts/build_rocprofiler_systems_container.sh`
+- Smoke-test the install against a minimal PyTorch ROCm workload:
+  - `scripts/smoke_test_rocprofiler_systems_container.sh`
+
+Run the build from a login node:
+
+```bash
+REPO_DIR=/scratch/<project_id>/$USER/lumi-job-profiler
+"${REPO_DIR}/scripts/build_rocprofiler_systems_container.sh"
+```
+
+The build script:
+
+- clones `https://github.com/ROCm/rocprofiler-systems.git` with submodules if needed
+- builds inside the multitorch ROCm 6.4 container
+- disables MPI-related autodetection that broke the source build on LUMI
+- installs to `/scratch/<project_id>/$USER/tools/rocprofiler-systems-container` by default
+
+Supported overrides:
+
+- `ACCOUNT`
+- `PARTITION`
+- `CONTAINER_IMAGE`
+- `INSTALL_PREFIX`
+- `BASE_DIR`
+- `PROJECTS_DIR`
+- `SOURCE_DIR`
+
+Example:
+
+```bash
+REPO_DIR=/scratch/<project_id>/$USER/lumi-job-profiler
+ACCOUNT=<project_id> \
+PARTITION=small-g \
+INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
+"${REPO_DIR}/scripts/build_rocprofiler_systems_container.sh"
+```
+
+Smoke-test the install:
+
+```bash
+REPO_DIR=/scratch/<project_id>/$USER/lumi-job-profiler
+INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
+"${REPO_DIR}/scripts/smoke_test_rocprofiler_systems_container.sh"
+```
+
+The smoke test verifies:
+
+- `rocprof-sys-python` starts in the container
+- the required runtime environment is set:
+  - `ROCPROFSYS_SCRIPT_PATH`
+  - `LD_LIBRARY_PATH` including PyTorch `torch/lib` and the rocprofiler-systems libraries
+- a minimal PyTorch ROCm script completes under the profiler
+- Perfetto-compatible outputs are produced under the smoke-test output directory
+
+Once the build succeeds, enable `deep-system` in normal profiled jobs with:
+
+```bash
+REPO_DIR=/scratch/<project_id>/$USER/lumi-job-profiler
+LUMI_PROFILE_MODE=deep-system \
+LUMI_CONTAINER_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif \
+ROCPROFSYS_INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
+sbatch "${REPO_DIR}/templates/sbatch_profiled.sh"
+```
+
+The hook handles the extra runtime environment automatically when `ROCPROFSYS_INSTALL_PREFIX` is set.
 
 ## Development
 
