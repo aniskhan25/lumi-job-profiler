@@ -2,33 +2,28 @@
 
 set -euo pipefail
 
-ACCOUNT="${ACCOUNT:-project_462000131}"
-PARTITION="${PARTITION:-small-g}"
-CPUS_PER_TASK="${CPUS_PER_TASK:-7}"
-GPUS_PER_NODE="${GPUS_PER_NODE:-1}"
-MEMORY="${MEMORY:-32G}"
-TIME_LIMIT="${TIME_LIMIT:-00:10:00}"
+PROJECT_ID="${PROJECT_ID:-project_462000131}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif}"
-INSTALL_PREFIX="${INSTALL_PREFIX:-/scratch/${ACCOUNT}/${USER}/tools/rocprofiler-systems-container}"
+INSTALL_PREFIX="${INSTALL_PREFIX:-/scratch/${PROJECT_ID}/${USER}/tools/rocprofiler-systems-container}"
 
 sbatch <<EOF
 #!/bin/bash
 #SBATCH -J rocprofsys_smoke
-#SBATCH --account=${ACCOUNT}
-#SBATCH --partition=${PARTITION}
+#SBATCH --account=${PROJECT_ID}
+#SBATCH --partition=small-g
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=${CPUS_PER_TASK}
-#SBATCH --gpus-per-node=${GPUS_PER_NODE}
-#SBATCH --mem=${MEMORY}
-#SBATCH --time=${TIME_LIMIT}
-#SBATCH --output=/scratch/${ACCOUNT}/%u/slurm-%j.out
-#SBATCH --error=/scratch/${ACCOUNT}/%u/slurm-%j.err
+#SBATCH --cpus-per-task=7
+#SBATCH --gpus-per-node=1
+#SBATCH --mem=32G
+#SBATCH --time=00:10:00
+#SBATCH --output=/scratch/${PROJECT_ID}/%u/slurm-%j.out
+#SBATCH --error=/scratch/${PROJECT_ID}/%u/slurm-%j.err
 
 set -euo pipefail
 
 SIF="${CONTAINER_IMAGE}"
 INSTALL="${INSTALL_PREFIX}"
-OUTDIR="/scratch/${ACCOUNT}/\${USER}/rocprofsys-smoke-\${SLURM_JOB_ID}"
+OUTDIR="/scratch/${PROJECT_ID}/\${USER}/rocprofsys-smoke-\${SLURM_JOB_ID}"
 mkdir -p "\${OUTDIR}"
 
 cat > "\${OUTDIR}/mini_torch_rocm.py" <<'PY'

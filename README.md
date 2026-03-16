@@ -328,20 +328,17 @@ The build script:
 
 Supported overrides:
 
-- `ACCOUNT`
-- `PARTITION`
+- `PROJECT_ID`
 - `CONTAINER_IMAGE`
+- `TOOLS_DIR`
 - `INSTALL_PREFIX`
-- `BASE_DIR`
-- `PROJECTS_DIR`
 - `SOURCE_DIR`
 
 Example:
 
 ```bash
 REPO_DIR=/scratch/<project_id>/$USER/lumi-job-profiler
-ACCOUNT=<project_id> \
-PARTITION=small-g \
+PROJECT_ID=<project_id> \
 INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
 "${REPO_DIR}/scripts/build_rocprofiler_systems_container.sh"
 ```

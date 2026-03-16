@@ -2,39 +2,33 @@
 
 set -euo pipefail
 
-ACCOUNT="${ACCOUNT:-project_462000131}"
-PARTITION="${PARTITION:-small-g}"
-CPUS_PER_TASK="${CPUS_PER_TASK:-8}"
-MEMORY="${MEMORY:-32G}"
-TIME_LIMIT="${TIME_LIMIT:-02:00:00}"
+PROJECT_ID="${PROJECT_ID:-project_462000131}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif}"
-BASE_DIR="${BASE_DIR:-/scratch/${ACCOUNT}/${USER}/tools/rocm-systems}"
-PROJECTS_DIR="${PROJECTS_DIR:-${BASE_DIR}/projects}"
-SOURCE_DIR="${SOURCE_DIR:-${PROJECTS_DIR}/rocprofiler-systems}"
-INSTALL_PREFIX="${INSTALL_PREFIX:-/scratch/${ACCOUNT}/${USER}/tools/rocprofiler-systems-container}"
+TOOLS_DIR="${TOOLS_DIR:-/scratch/${PROJECT_ID}/${USER}/tools}"
+SOURCE_DIR="${SOURCE_DIR:-${TOOLS_DIR}/rocm-systems/projects/rocprofiler-systems}"
+INSTALL_PREFIX="${INSTALL_PREFIX:-${TOOLS_DIR}/rocprofiler-systems-container}"
 
 sbatch <<EOF
 #!/bin/bash
 #SBATCH -J rocprofsys_build
-#SBATCH --account=${ACCOUNT}
-#SBATCH --partition=${PARTITION}
+#SBATCH --account=${PROJECT_ID}
+#SBATCH --partition=small-g
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=${CPUS_PER_TASK}
-#SBATCH --mem=${MEMORY}
-#SBATCH --time=${TIME_LIMIT}
-#SBATCH --output=/scratch/${ACCOUNT}/%u/slurm-%j.out
-#SBATCH --error=/scratch/${ACCOUNT}/%u/slurm-%j.err
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+#SBATCH --output=/scratch/${PROJECT_ID}/%u/slurm-%j.out
+#SBATCH --error=/scratch/${PROJECT_ID}/%u/slurm-%j.err
 
 set -euo pipefail
 
 SIF="${CONTAINER_IMAGE}"
-PROJECTS="${PROJECTS_DIR}"
 SRC="${SOURCE_DIR}"
-WORK="/scratch/${ACCOUNT}/\${USER}/rocprofsys-container-build-\${SLURM_JOB_ID}"
+WORK="/scratch/${PROJECT_ID}/\${USER}/rocprofsys-container-build-\${SLURM_JOB_ID}"
 BUILD="\${WORK}/build"
 INSTALL="${INSTALL_PREFIX}"
 
-mkdir -p "\${PROJECTS}" "\${WORK}" "\${INSTALL}"
+mkdir -p "\$(dirname "\${SRC}")" "\${WORK}" "\${INSTALL}"
 
 if [[ ! -d "\${SRC}/.git" ]]; then
   rm -rf "\${SRC}"
@@ -95,7 +89,7 @@ cmake -B "'"'"'\${BUILD}'"'"'" -S "'"'"'\${SRC}'"'"'" \
   -D ROCPROFSYS_BUILD_LIBIBERTY=ON \
   2>&1 | tee "'"'"'\${WORK}'"'"'/cmake.log"
 
-cmake --build "'"'"'\${BUILD}'"'"'" --parallel ${CPUS_PER_TASK} 2>&1 | tee "'"'"'\${WORK}'"'"'/build.log"
+cmake --build "'"'"'\${BUILD}'"'"'" --parallel 8 2>&1 | tee "'"'"'\${WORK}'"'"'/build.log"
 cmake --install "'"'"'\${BUILD}'"'"'" 2>&1 | tee "'"'"'\${WORK}'"'"'/install.log"
 ' > "\${WORK}/job.log" 2>&1 || true
 
