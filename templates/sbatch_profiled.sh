@@ -25,8 +25,8 @@ source "${REPO_DIR}/scripts/profile_hook.sh"
 # payload inside the configured container for both light and deep-trace modes.
 DEMO_APP="${REPO_DIR}/scripts/demo_pytorch_rocm.py"
 if [[ -f "${DEMO_APP}" ]]; then
-  profile_run -- srun --cpu-bind=none --ntasks=1 python3 "${DEMO_APP}" --seconds 60 --size 4096 --dtype fp16
+  profile_run -- python3 "${DEMO_APP}" --seconds 60 --size 4096 --dtype fp16
 else
-  profile_run -- srun --cpu-bind=none --ntasks=1 ./your_application
+  profile_run -- ./your_application
 fi
 # --- End job payload ---

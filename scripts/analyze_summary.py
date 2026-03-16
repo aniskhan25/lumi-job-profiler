@@ -20,6 +20,15 @@ def iso_timestamp():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def make_finding(cause, confidence, evidence, recommendation):
+    return {
+        "cause": cause,
+        "confidence": confidence,
+        "evidence": evidence,
+        "recommendation": recommendation,
+    }
+
+
 def classify_efficiency(avg_gpu_util_pct):
     if avg_gpu_util_pct is None:
         return {
@@ -84,46 +93,46 @@ def infer_root_causes(summary):
     if avg_gpu_util < 30.0 and peak_vram is not None and peak_vram < 20.0 and total_gpu_slots > 1:
         recommended_gpus = max(active_gpus, 1)
         findings.append(
-            {
-                "cause": "overscaling",
-                "confidence": 0.85,
-                "evidence": (
+            make_finding(
+                "overscaling",
+                0.85,
+                (
                     f"Average GPU utilization is {avg_gpu_util:.1f}% and peak VRAM use is "
                     f"{peak_vram:.1f}% across {total_gpu_slots} observed GPUs."
                 ),
-                "recommendation": {
+                {
                     "type": "right_size_gpus",
                     "recommended_gpus": recommended_gpus,
                     "reason": "Low utilization and low VRAM usage suggest the job is over-provisioned.",
                 },
-            }
+            )
         )
 
     if avg_gpu_util < 40.0 and total_gpu_slots > 0 and active_gpus < total_gpu_slots:
         ntasks = job.get("ntasks")
         ntasks_text = f" Slurm reported ntasks={ntasks}." if ntasks is not None else ""
         findings.append(
-            {
-                "cause": "parallelism_mismatch",
-                "confidence": 0.8,
-                "evidence": (
+            make_finding(
+                "parallelism_mismatch",
+                0.8,
+                (
                     f"Only {active_gpus} of {total_gpu_slots} observed GPUs exceeded the active threshold "
                     f"while average utilization was {avg_gpu_util:.1f}%.{ntasks_text}"
                 ),
-                "recommendation": {
+                {
                     "type": "align_ranks_and_gpus",
                     "recommended_gpus": max(active_gpus, 1),
                     "reason": "Match the requested GPU count to the number of GPUs doing sustained work.",
                 },
-                }
             )
+        )
 
     if avg_gpu_util < 40.0 and avg_cpu_util is not None and avg_cpu_util >= 70.0:
         findings.append(
-            {
-                "cause": "cpu_bottleneck",
-                "confidence": 0.75,
-                "evidence": (
+            make_finding(
+                "cpu_bottleneck",
+                0.75,
+                (
                     f"Average GPU utilization is {avg_gpu_util:.1f}% while average CPU utilization is "
                     f"{avg_cpu_util:.1f}%"
                     + (
@@ -132,11 +141,11 @@ def infer_root_causes(summary):
                         else "."
                     )
                 ),
-                "recommendation": {
+                {
                     "type": "inspect_cpu_pipeline",
                     "reason": "Inspect data loading, preprocessing, thread placement, or other host-side bottlenecks.",
                 },
-            }
+            )
         )
 
     util_gaps = [
@@ -148,31 +157,31 @@ def infer_root_causes(summary):
         avg_gap = mean(util_gaps)
         if avg_gpu_util < 50.0 and avg_gap >= 25.0:
             findings.append(
-                {
-                    "cause": "sync_or_io_stalls",
-                    "confidence": 0.65,
-                    "evidence": (
+                make_finding(
+                    "sync_or_io_stalls",
+                    0.65,
+                    (
                         f"Average GPU utilization is {avg_gpu_util:.1f}% but the average p95-to-mean gap "
                         f"is {avg_gap:.1f} percentage points, suggesting bursty execution."
                     ),
-                    "recommendation": {
+                    {
                         "type": "investigate_stalls",
                         "reason": "Inspect data loading, synchronization points, or other host-side stalls.",
                     },
-                }
+                )
             )
 
     if not findings and avg_gpu_util >= 70.0:
         findings.append(
-            {
-                "cause": "well_utilized",
-                "confidence": 0.9,
-                "evidence": f"Average GPU utilization is {avg_gpu_util:.1f}%, which is already high.",
-                "recommendation": {
+            make_finding(
+                "well_utilized",
+                0.9,
+                f"Average GPU utilization is {avg_gpu_util:.1f}%, which is already high.",
+                {
                     "type": "none",
                     "reason": "No immediate GPU efficiency issue was detected from the lightweight profile.",
                 },
-            }
+            )
         )
 
     return findings

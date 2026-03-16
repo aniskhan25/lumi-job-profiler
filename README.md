@@ -49,7 +49,7 @@ export LUMI_CONTAINER_RUNTIME=singularity
 3. Wrap your current launch command:
 
 ```bash
-profile_run -- srun python3 myprog.py <options>
+profile_run -- python3 myprog.py <options>
 ```
 
 4. Submit the job as usual:
@@ -104,6 +104,8 @@ Available functions:
 - `profile_summarize`: write `summary.json`
 - `profile_cleanup`: run `profile_stop` and `profile_summarize` safely
 - `profile_run -- <command>`: convenience wrapper for single-command jobs
+
+`profile_run` now supports direct commands only. Keep Slurm allocation details in the job script itself and pass the application launch directly to the hook.
 
 Deep-trace note:
 

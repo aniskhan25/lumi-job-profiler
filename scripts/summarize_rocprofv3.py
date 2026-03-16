@@ -3,14 +3,20 @@
 
 import argparse
 import csv
-from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
+import sys
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from deep_profile_common import build_deep_manifest as build_manifest
+from deep_profile_common import iso_timestamp, write_json
 
 
 TRACE_SCHEMA_VERSION = 1
-DEEP_MANIFEST_SCHEMA_VERSION = 1
 TOP_N = 5
 TRACE_ROW_SUFFIX = "_trace"
 STATS_SUFFIX = "_stats"
@@ -23,12 +29,6 @@ RUNTIME_BUFFER_KEYS = (
     "rccl_api",
     "scratch_memory",
 )
-
-
-def iso_timestamp():
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
 def as_number(value):
     if value in (None, ""):
         return None
@@ -251,31 +251,7 @@ def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
 
 
 def build_deep_manifest(trace_summary, summary_output, manifest_output):
-    summary_path = Path(summary_output)
-    manifest_path = Path(manifest_output)
-    return {
-        "deep_manifest_schema_version": DEEP_MANIFEST_SCHEMA_VERSION,
-        "generated_at": iso_timestamp(),
-        "mode": trace_summary.get("mode"),
-        "status": trace_summary.get("status"),
-        "tool": trace_summary.get("tool", {}),
-        "command": trace_summary.get("command"),
-        "exit_code": trace_summary.get("exit_code"),
-        "artifacts": {
-            "trace_summary": str(summary_path),
-            "trace_raw_dir": trace_summary.get("trace_dir"),
-            "deep_manifest": str(manifest_path),
-        },
-        "trace_summary_preview": trace_summary.get("preview", {}),
-        "warnings": trace_summary.get("warnings", []),
-    }
-
-
-def write_json(path, payload):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
-        handle.write("\n")
+    return build_manifest(trace_summary, summary_output, manifest_output, trace_summary.get("trace_dir", ""))
 
 
 def main():

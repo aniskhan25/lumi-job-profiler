@@ -2,18 +2,19 @@
 """Summarize rocprofiler-systems artifacts and emit a deep-profile manifest."""
 
 import argparse
-from datetime import datetime, timezone
-import json
-import os
 from pathlib import Path
+import sys
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from deep_profile_common import build_deep_manifest as build_manifest
+from deep_profile_common import iso_timestamp, write_json
 
 
 SYSTEM_SCHEMA_VERSION = 1
-DEEP_MANIFEST_SCHEMA_VERSION = 1
-
-
-def iso_timestamp():
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def build_system_summary(raw_dir, tool_path, mode, command, status, exit_code):
@@ -73,31 +74,7 @@ def build_system_summary(raw_dir, tool_path, mode, command, status, exit_code):
 
 
 def build_deep_manifest(system_summary, summary_output, manifest_output):
-    summary_path = Path(summary_output)
-    manifest_path = Path(manifest_output)
-    return {
-        "deep_manifest_schema_version": DEEP_MANIFEST_SCHEMA_VERSION,
-        "generated_at": iso_timestamp(),
-        "mode": system_summary.get("mode"),
-        "status": system_summary.get("status"),
-        "tool": system_summary.get("tool", {}),
-        "command": system_summary.get("command"),
-        "exit_code": system_summary.get("exit_code"),
-        "artifacts": {
-            "trace_summary": str(summary_path),
-            "trace_raw_dir": system_summary.get("raw_dir"),
-            "deep_manifest": str(manifest_path),
-        },
-        "trace_summary_preview": system_summary.get("preview", {}),
-        "warnings": system_summary.get("warnings", []),
-    }
-
-
-def write_json(path, payload):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
-        handle.write("\n")
+    return build_manifest(system_summary, summary_output, manifest_output, system_summary.get("raw_dir", ""))
 
 
 def main():

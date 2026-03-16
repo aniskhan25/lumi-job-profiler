@@ -50,14 +50,11 @@ PROFILE_DEEP_TOOL_CMD=()
 PROFILE_ROCPROFV3_TRACE_ARGS=()
 PROFILE_CONTAINER_CMD=()
 PROFILE_CONTAINER_BIND_SPECS=()
-PROFILE_SRUN_ARGS=()
-PROFILE_SRUN_PAYLOAD_ARGS=()
 PROFILE_DEEP_TRACE_TOOL_PATH=""
 
 . "${_profile_hook_dir}/lib/profile_container.sh"
 . "${_profile_hook_dir}/lib/profile_deep_trace.sh"
 . "${_profile_hook_dir}/lib/profile_deep_system.sh"
-. "${_profile_hook_dir}/lib/profile_slurm.sh"
 
 profile_resolve_collect_command() {
   PROFILE_COLLECT_WARNING=""
@@ -273,85 +270,39 @@ profile_run_command() {
     mkdir -p "${DEEP_SYSTEM_RAW_DIR}"
   fi
 
-  if profile_split_srun_command "$@" && [[ "${#PROFILE_SRUN_PAYLOAD_ARGS[@]}" -gt 0 ]]; then
-    if profile_container_enabled; then
-      local container_build_status=0
-      profile_build_container_command "${PROFILE_SRUN_PAYLOAD_ARGS[@]}" || container_build_status=$?
-      if [[ "${container_build_status}" != "0" ]]; then
-        return "${container_build_status}"
-      fi
+  if profile_container_enabled; then
+    local container_build_status=0
+    profile_build_container_command "$@" || container_build_status=$?
+    if [[ "${container_build_status}" != "0" ]]; then
+      return "${container_build_status}"
+    fi
 
-      if [[ "${deep_profile_enabled}" == "1" ]]; then
-        local -a traced_srun_cmd=(
-          srun
-          "${PROFILE_SRUN_ARGS[@]}"
-        )
-        if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
-          PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
-          traced_srun_cmd+=("${PROFILE_CONTAINER_CMD[@]}")
-          profile_build_rocprofv3_trace_args
-          traced_srun_cmd+=("${PROFILE_ROCPROFV3_TRACE_ARGS[@]}")
-          traced_srun_cmd+=(-- "${PROFILE_SRUN_PAYLOAD_ARGS[@]}")
-        else
-          profile_build_rocprofsys_container_command "${PROFILE_SRUN_PAYLOAD_ARGS[@]}" || return $?
-          traced_srun_cmd+=("${PROFILE_DEEP_TOOL_CMD[@]}")
-        fi
-        "${traced_srun_cmd[@]}"
+    if [[ "${deep_profile_enabled}" == "1" ]]; then
+      if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
+        PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
+        local -a container_rocprof_cmd=("${PROFILE_CONTAINER_CMD[@]}")
+        profile_build_rocprofv3_trace_args
+        container_rocprof_cmd+=("${PROFILE_ROCPROFV3_TRACE_ARGS[@]}")
+        container_rocprof_cmd+=(-- "$@")
+        "${container_rocprof_cmd[@]}"
       else
-        local -a container_srun_cmd=(
-          srun
-          "${PROFILE_SRUN_ARGS[@]}"
-          "${PROFILE_CONTAINER_CMD[@]}"
-          "${PROFILE_SRUN_PAYLOAD_ARGS[@]}"
-        )
-        "${container_srun_cmd[@]}"
+        profile_build_rocprofsys_container_command "$@" || return $?
+        "${PROFILE_DEEP_TOOL_CMD[@]}"
       fi
     else
-      if [[ "${deep_profile_enabled}" == "1" ]]; then
-        echo "Deep profiling is supported only for container launches. Set LUMI_CONTAINER_IMAGE to a supported PyTorch container; running without deep profile artifacts." >&2
-        "$@"
-        status=$?
-        profile_finalize_deep_profile "${status}" "fallback_unsupported_host_deep_profile" "$@"
-        return "${status}"
-      fi
-
-      "$@"
+      local -a container_cmd=("${PROFILE_CONTAINER_CMD[@]}" "$@")
+      "${container_cmd[@]}"
     fi
   else
-    if profile_container_enabled; then
-      local container_build_status=0
-      profile_build_container_command "$@" || container_build_status=$?
-      if [[ "${container_build_status}" != "0" ]]; then
-        return "${container_build_status}"
-      fi
-
-      if [[ "${deep_profile_enabled}" == "1" ]]; then
-        if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
-          PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
-          local -a container_rocprof_cmd=("${PROFILE_CONTAINER_CMD[@]}")
-          profile_build_rocprofv3_trace_args
-          container_rocprof_cmd+=("${PROFILE_ROCPROFV3_TRACE_ARGS[@]}")
-          container_rocprof_cmd+=(-- "$@")
-          "${container_rocprof_cmd[@]}"
-        else
-          profile_build_rocprofsys_container_command "$@" || return $?
-          "${PROFILE_DEEP_TOOL_CMD[@]}"
-        fi
-      else
-        local -a container_cmd=("${PROFILE_CONTAINER_CMD[@]}" "$@")
-        "${container_cmd[@]}"
-      fi
-    else
-      if [[ "${deep_profile_enabled}" == "1" ]]; then
-        echo "Deep profiling is supported only for container launches. Set LUMI_CONTAINER_IMAGE to a supported PyTorch container; running without deep profile artifacts." >&2
-        "$@"
-        status=$?
-        profile_finalize_deep_profile "${status}" "fallback_unsupported_host_deep_profile" "$@"
-        return "${status}"
-      fi
-
+    if [[ "${deep_profile_enabled}" == "1" ]]; then
+      echo "Deep profiling is supported only for container launches. Set LUMI_CONTAINER_IMAGE to a supported PyTorch container; running without deep profile artifacts." >&2
       "$@"
+      status=$?
+      profile_finalize_deep_profile "${status}" "fallback_unsupported_host_deep_profile" "$@"
+      return "${status}"
     fi
+
+    "$@"
   fi
 
   status=$?
