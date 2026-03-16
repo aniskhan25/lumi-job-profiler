@@ -21,18 +21,28 @@ profile_build_container_command() {
     return 2
   fi
 
-  mkdir -p "${PROFILE_DIR}" "${DEEP_PROFILE_DIR}" "${DEEP_TRACE_DIR}" "${DEEP_TRACE_RAW_DIR}" "${LUMI_CONTAINER_WORKDIR}"
+  mkdir -p "${PROFILE_DIR}" "${DEEP_PROFILE_DIR}" "${LUMI_CONTAINER_WORKDIR}"
 
   local -a bind_specs=(
     "${PROFILE_DIR}:${PROFILE_DIR}"
     "${DEEP_PROFILE_DIR}:${DEEP_PROFILE_DIR}"
-    "${DEEP_TRACE_DIR}:${DEEP_TRACE_DIR}"
-    "${DEEP_TRACE_RAW_DIR}:${DEEP_TRACE_RAW_DIR}"
-    "${DEEP_SYSTEM_DIR}:${DEEP_SYSTEM_DIR}"
-    "${DEEP_SYSTEM_RAW_DIR}:${DEEP_SYSTEM_RAW_DIR}"
     "${LUMI_CONTAINER_WORKDIR}:${LUMI_CONTAINER_WORKDIR}"
     "${PWD}:${PWD}"
   )
+
+  if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
+    mkdir -p "${DEEP_TRACE_DIR}" "${DEEP_TRACE_RAW_DIR}"
+    bind_specs+=(
+      "${DEEP_TRACE_DIR}:${DEEP_TRACE_DIR}"
+      "${DEEP_TRACE_RAW_DIR}:${DEEP_TRACE_RAW_DIR}"
+    )
+  elif [[ "${PROFILE_MODE}" == "deep-system" ]]; then
+    mkdir -p "${DEEP_SYSTEM_DIR}" "${DEEP_SYSTEM_RAW_DIR}"
+    bind_specs+=(
+      "${DEEP_SYSTEM_DIR}:${DEEP_SYSTEM_DIR}"
+      "${DEEP_SYSTEM_RAW_DIR}:${DEEP_SYSTEM_RAW_DIR}"
+    )
+  fi
 
   if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
     bind_specs+=("${SLURM_SUBMIT_DIR}:${SLURM_SUBMIT_DIR}")

@@ -94,11 +94,14 @@ class ProfileHookTests(unittest.TestCase):
 
             singularity_args = singularity_log.read_text().splitlines()
             app_args = app_log.read_text().splitlines()
+            bind_spec = singularity_args[singularity_args.index("--bind") + 1]
 
             self.assertEqual(singularity_args[0], "exec")
             self.assertIn("--bind", singularity_args)
             self.assertIn("--pwd", singularity_args)
             self.assertIn(str(container_image), singularity_args)
+            self.assertNotIn("/deep_profile/system", bind_spec)
+            self.assertNotIn("/deep_profile/trace", bind_spec)
             self.assertEqual(singularity_args[-3:], [str(fake_app), "alpha", "beta"])
             self.assertEqual(app_args, ["alpha", "beta"])
 
