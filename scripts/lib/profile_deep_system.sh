@@ -46,6 +46,6 @@ profile_build_rocprofsys_container_command() {
   script+="cd $(printf '%q' "${DEEP_SYSTEM_RAW_DIR}")"$'\n'
   script+="$(printf '%q' "${runner}") ${extra_opts}${output_opts}${payload_cmd}"$'\n'
 
-  PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${runner}"
+  PROFILE_DEEP_TRACE_TOOL_PATH="singularity exec ${LUMI_CONTAINER_IMAGE} ${runner}"
   PROFILE_DEEP_TOOL_CMD=("${PROFILE_CONTAINER_CMD[@]}" bash -lc "${script}")
 }

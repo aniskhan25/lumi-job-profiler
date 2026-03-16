@@ -43,7 +43,6 @@ For containerized PyTorch jobs, also export the container image before `profile_
 
 ```bash
 export LUMI_CONTAINER_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif
-export LUMI_CONTAINER_RUNTIME=singularity
 ```
 
 3. Wrap your current launch command:
@@ -126,7 +125,6 @@ The helper is enabled by default. You can override behavior with:
 - `LUMI_PROFILE_MODE=deep-trace` to keep the lightweight profile and also run `rocprofv3` for `profile_run`
 - `LUMI_PROFILE_MODE=deep-system` to keep the lightweight profile and also run `rocprofiler-systems` for `profile_run`
 - `LUMI_CONTAINER_IMAGE=/path/to/container.sif` to run the profiled payload inside a container
-- `LUMI_CONTAINER_RUNTIME=singularity` to choose the container runtime used by the hook
 - `LUMI_CONTAINER_BIND_EXTRA="/path/a:/path/a,/path/b:/path/b"` to add extra bind mounts for container runs
 - `ROCPROFV3_EXTRA_OPTS="..."` to append extra `rocprofv3` options in deep-trace mode
 - `ROCPROFSYS_INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container` to enable `deep-system`

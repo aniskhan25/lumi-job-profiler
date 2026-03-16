@@ -84,7 +84,6 @@ class ProfileHookTests(unittest.TestCase):
                 source "{SCRIPT_PATH}"
                 PATH="{tmp_path}:$PATH"
                 LUMI_CONTAINER_IMAGE="{container_image}"
-                LUMI_CONTAINER_RUNTIME=singularity
                 LUMI_CONTAINER_WORKDIR="{workdir}"
                 profile_run_command "{fake_app}" alpha beta
                 """
@@ -189,7 +188,6 @@ class ProfileHookTests(unittest.TestCase):
                 DEEP_TRACE_RAW_DIR="{raw_dir}"
                 PATH="{tmp_path}:$PATH"
                 LUMI_CONTAINER_IMAGE="{container_image}"
-                LUMI_CONTAINER_RUNTIME=singularity
                 LUMI_CONTAINER_WORKDIR="{workdir}"
                 profile_run_command "{fake_app}" alpha beta
                 """
@@ -366,7 +364,6 @@ class ProfileHookTests(unittest.TestCase):
                 DEEP_SYSTEM_RAW_DIR="{raw_dir}"
                 PATH="{tmp_path}:$PATH"
                 LUMI_CONTAINER_IMAGE="{container_image}"
-                LUMI_CONTAINER_RUNTIME=singularity
                 LUMI_CONTAINER_WORKDIR="{workdir}"
                 ROCPROFSYS_INSTALL_PREFIX="{install_prefix}"
                 profile_run_command "{fake_python}" "{fake_app}" alpha beta

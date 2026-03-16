@@ -15,7 +15,6 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-${SLURM_SUBMIT_DIR}}"
 CONTAINER_IMAGE_DEFAULT="/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif"
 export LUMI_CONTAINER_IMAGE="${LUMI_CONTAINER_IMAGE:-${CONTAINER_IMAGE_DEFAULT}}"
-export LUMI_CONTAINER_RUNTIME="${LUMI_CONTAINER_RUNTIME:-singularity}"
 # Enable this when using `LUMI_PROFILE_MODE=deep-system`.
 # export ROCPROFSYS_INSTALL_PREFIX="${ROCPROFSYS_INSTALL_PREFIX:-/scratch/project_462000131/${USER}/tools/rocprofiler-systems-container}"
 source "${REPO_DIR}/scripts/profile_hook.sh"

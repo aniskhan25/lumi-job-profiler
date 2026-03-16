@@ -26,7 +26,6 @@ DEEP_SYSTEM_SUMMARY="${DEEP_SYSTEM_SUMMARY:-${DEEP_SYSTEM_DIR}/summary.json}"
 DEEP_MANIFEST="${DEEP_MANIFEST:-${DEEP_PROFILE_DIR}/deep_manifest.json}"
 ROCPROFV3_PATH="${ROCPROFV3_PATH:-$(command -v rocprofv3 2>/dev/null || true)}"
 ROCPROFV3_EXTRA_OPTS="${ROCPROFV3_EXTRA_OPTS:-}"
-LUMI_CONTAINER_RUNTIME="${LUMI_CONTAINER_RUNTIME:-singularity}"
 LUMI_CONTAINER_IMAGE="${LUMI_CONTAINER_IMAGE:-}"
 LUMI_CONTAINER_USE_ROCM="${LUMI_CONTAINER_USE_ROCM:-1}"
 LUMI_CONTAINER_BIND_EXTRA="${LUMI_CONTAINER_BIND_EXTRA:-}"
@@ -44,7 +43,6 @@ PROFILER_PID=""
 PROFILE_DEEP_TOOL_CMD=()
 PROFILE_ROCPROFV3_TRACE_ARGS=()
 PROFILE_CONTAINER_CMD=()
-PROFILE_CONTAINER_BIND_SPECS=()
 PROFILE_DEEP_TRACE_TOOL_PATH=""
 
 . "${_profile_hook_dir}/lib/profile_container.sh"
@@ -231,7 +229,7 @@ profile_run_command() {
 
     if [[ "${deep_profile_enabled}" == "1" ]]; then
       if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
-        PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
+        PROFILE_DEEP_TRACE_TOOL_PATH="singularity exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
         local -a container_rocprof_cmd=("${PROFILE_CONTAINER_CMD[@]}")
         profile_build_rocprofv3_trace_args
         container_rocprof_cmd+=("${PROFILE_ROCPROFV3_TRACE_ARGS[@]}")
