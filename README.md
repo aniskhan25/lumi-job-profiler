@@ -244,6 +244,8 @@ When `LUMI_PROFILE_MODE=deep-system` is set and `ROCPROFSYS_INSTALL_PREFIX` poin
 /scratch/<project_id>/<user>/lumi-profile/<job_id>/deep_profile/system/raw/
 ```
 
+For `deep-system`, the main artifact is `perfetto-trace-*.proto` under `deep_profile/system/raw/rocprofsys-*/.../`. Open that file in [Perfetto UI](https://ui.perfetto.dev) for timeline analysis.
+
 Deep profiling keeps the existing lightweight artifacts and adds either `rocprofv3` trace artifacts (`deep-trace`) or `rocprofiler-systems` artifacts (`deep-system`) for the wrapped command. The supported path is container-first: the hook runs the profiled payload inside `LUMI_CONTAINER_IMAGE` and launches the selected tool inside that container. If the container or the requested deep tool is unavailable, the job still runs and `deep_manifest.json` records the fallback.
 
 `summary.json` contains:

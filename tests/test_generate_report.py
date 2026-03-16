@@ -166,6 +166,7 @@ class GenerateReportTests(unittest.TestCase):
 
         self.assertIn("## Deep System", report["markdown"])
         self.assertIn("Perfetto trace files: 1", report["markdown"])
+        self.assertIn("https://ui.perfetto.dev", report["markdown"])
         self.assertIn("<h2>Deep System</h2>", report["html"])
 
 

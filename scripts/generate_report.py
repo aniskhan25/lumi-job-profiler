@@ -177,6 +177,7 @@ def deep_system_lines(deep_manifest):
     perfetto_sample = preview.get("perfetto_trace_sample", [])
     if perfetto_sample:
         lines.append(f"- Perfetto sample: {', '.join(perfetto_sample[:3])}")
+        lines.append("- Open Perfetto traces in https://ui.perfetto.dev")
 
     warnings = deep_manifest.get("warnings", [])
     if warnings:
