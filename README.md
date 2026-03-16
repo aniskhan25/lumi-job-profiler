@@ -1,4 +1,4 @@
-# LUMI Job Profiler (Demo)
+# LUMI Job Profiler
 
 This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm). It samples GPU metrics with `rocm-smi` during a job and produces a compact JSON summary at the end.
 
@@ -104,16 +104,15 @@ Available functions:
 - `profile_cleanup`: run `profile_stop` and `profile_summarize` safely
 - `profile_run -- <command>`: convenience wrapper for single-command jobs
 
-`profile_run` now supports direct commands only. Keep Slurm allocation details in the job script itself and pass the application launch directly to the hook.
+`profile_run` supports direct commands only. Keep Slurm allocation details in the job script itself and pass the application launch directly to the hook.
 
 Deep-trace note:
 
-- `LUMI_PROFILE_MODE=deep-trace` currently applies to the wrapped `profile_run -- <command>` path
+- `LUMI_PROFILE_MODE=deep-trace` applies to the wrapped `profile_run -- <command>` path
 - deep-trace is supported for container launches configured with `LUMI_CONTAINER_IMAGE`
 - `LUMI_PROFILE_MODE=deep-system` runs `rocprofiler-systems` inside the container and writes Perfetto-style system traces
-- host-side deep profiling with the retiring `pytorch/2.7` module stack is treated as unsupported
+- host-side deep profiling with the older `pytorch/2.7` module stack is unsupported
 - manual lifecycle control still manages the lightweight `rocm-smi` sidecar
-- host-side deep profiling with the retiring `pytorch/2.7` module stack is treated as unsupported
 
 ## Controls
 
