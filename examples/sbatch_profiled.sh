@@ -17,12 +17,12 @@ CONTAINER_IMAGE_DEFAULT="/appl/local/laifs/containers/lumi-multitorch-u24r64f21m
 export LUMI_CONTAINER_IMAGE="${LUMI_CONTAINER_IMAGE:-${CONTAINER_IMAGE_DEFAULT}}"
 # Enable this when using `LUMI_PROFILE_MODE=deep-system`.
 # export ROCPROFSYS_INSTALL_PREFIX="${ROCPROFSYS_INSTALL_PREFIX:-/scratch/project_462000131/${USER}/tools/rocprofiler-systems-container}"
-source "${REPO_DIR}/scripts/profile_hook.sh"
+source "${REPO_DIR}/bin/profile_hook.sh"
 
 # --- Job payload ---
 # Replace this with your real application launch. The hook will run the
 # payload inside the configured container for both light and deep-trace modes.
-DEMO_APP="${REPO_DIR}/scripts/demo_pytorch_rocm.py"
+DEMO_APP="${REPO_DIR}/examples/demo_pytorch_rocm.py"
 if [[ -f "${DEMO_APP}" ]]; then
   profile_run -- python3 "${DEMO_APP}" --seconds 60 --size 4096 --dtype fp16
 else

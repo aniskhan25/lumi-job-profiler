@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Shared defaults for opt-in job profiling on LUMI.
-_profile_hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_profile_bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_profile_repo_dir="$(cd "${_profile_bin_dir}/.." && pwd)"
 
 PROFILE_ENABLE="${LUMI_PROFILE:-1}"
 PROFILE_MODE="${LUMI_PROFILE_MODE:-light}"
@@ -9,11 +10,11 @@ PROFILE_INTERVAL="${PROFILE_INTERVAL:-2}"
 PROFILE_DIR="${PROFILE_DIR:-/scratch/project_462000131/${USER}/lumi-profile/${SLURM_JOB_ID:-manual}}"
 PROFILE_COLLECT_CPU="${PROFILE_COLLECT_CPU:-0}"
 PROFILER_SRUN_OPTS="${PROFILER_SRUN_OPTS:---ntasks-per-node=1 --cpus-per-task=1 --mpi=none --cpu-bind=none --overlap}"
-SUMMARIZER="${SUMMARIZER:-${_profile_hook_dir}/summarize_rocm_smi.py}"
-ANALYZER="${ANALYZER:-${_profile_hook_dir}/analyze_summary.py}"
-REPORT_GENERATOR="${REPORT_GENERATOR:-${_profile_hook_dir}/generate_report.py}"
-ROCPROFV3_SUMMARIZER="${ROCPROFV3_SUMMARIZER:-${_profile_hook_dir}/summarize_rocprofv3.py}"
-ROCPROFSYS_SUMMARIZER="${ROCPROFSYS_SUMMARIZER:-${_profile_hook_dir}/summarize_rocprofsys.py}"
+SUMMARIZER="${SUMMARIZER:-${_profile_repo_dir}/scripts/summarize_rocm_smi.py}"
+ANALYZER="${ANALYZER:-${_profile_repo_dir}/scripts/analyze_summary.py}"
+REPORT_GENERATOR="${REPORT_GENERATOR:-${_profile_repo_dir}/scripts/generate_report.py}"
+ROCPROFV3_SUMMARIZER="${ROCPROFV3_SUMMARIZER:-${_profile_repo_dir}/scripts/summarize_rocprofv3.py}"
+ROCPROFSYS_SUMMARIZER="${ROCPROFSYS_SUMMARIZER:-${_profile_repo_dir}/scripts/summarize_rocprofsys.py}"
 PROFILE_LOG_SCHEMA_VERSION="${PROFILE_LOG_SCHEMA_VERSION:-1}"
 PROFILE_COLLECT_COMMAND="${PROFILE_COLLECT_COMMAND:-rocm-smi --showuse --showmemuse --showpower --showtemp --showclocks}"
 DEEP_PROFILE_DIR="${DEEP_PROFILE_DIR:-${PROFILE_DIR}/deep_profile}"
@@ -45,9 +46,9 @@ PROFILE_ROCPROFV3_TRACE_ARGS=()
 PROFILE_CONTAINER_CMD=()
 PROFILE_DEEP_TRACE_TOOL_PATH=""
 
-. "${_profile_hook_dir}/lib/profile_container.sh"
-. "${_profile_hook_dir}/lib/profile_deep_trace.sh"
-. "${_profile_hook_dir}/lib/profile_deep_system.sh"
+. "${_profile_repo_dir}/scripts/lib/profile_container.sh"
+. "${_profile_repo_dir}/scripts/lib/profile_deep_trace.sh"
+. "${_profile_repo_dir}/scripts/lib/profile_deep_system.sh"
 
 profile_start() {
   if [[ "${PROFILE_ENABLE}" != "1" || "${PROFILE_STARTED}" == "1" ]]; then

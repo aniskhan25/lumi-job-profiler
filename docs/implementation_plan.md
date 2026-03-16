@@ -33,7 +33,7 @@ Analysis and reports
 
 Current user-facing interface
 - User clones the repo to shared scratch
-- User sources `scripts/profile_hook.sh` in an existing `sbatch` script
+- User sources `bin/profile_hook.sh` in an existing `sbatch` script
 - User either wraps the main command with `profile_run -- <command>` or uses manual lifecycle control with `profile_start`, `profile_stop`, and `profile_summarize`
 
 Current execution model
