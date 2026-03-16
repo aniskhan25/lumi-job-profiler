@@ -7,11 +7,11 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-SUMMARIZER_PATH = REPO_ROOT / "scripts" / "summarize_rocm_smi.py"
-ANALYZER_PATH = REPO_ROOT / "scripts" / "analyze_summary.py"
-REPORT_PATH = REPO_ROOT / "scripts" / "generate_report.py"
-DEEP_TRACE_PATH = REPO_ROOT / "scripts" / "summarize_rocprofv3.py"
-DEEP_SYSTEM_PATH = REPO_ROOT / "scripts" / "summarize_rocprofsys.py"
+SUMMARIZER_PATH = REPO_ROOT / "src" / "summarize_rocm_smi.py"
+ANALYZER_PATH = REPO_ROOT / "src" / "analyze_summary.py"
+REPORT_PATH = REPO_ROOT / "src" / "generate_report.py"
+DEEP_TRACE_PATH = REPO_ROOT / "src" / "summarize_rocprofv3.py"
+DEEP_SYSTEM_PATH = REPO_ROOT / "src" / "summarize_rocprofsys.py"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005028.log"
 CPU_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005029_cpu.log"
 DEEP_TRACE_FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "rocprofv3_trace" / "raw"

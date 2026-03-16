@@ -4,13 +4,13 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 
 ## What’s Included
 
-- `bin/profile_hook.sh`: shell helper for minimal opt-in profiling in existing jobs
+- `scripts/profile_hook.sh`: shell helper for minimal opt-in profiling in existing jobs
 - `examples/sbatch_profiled.sh`: example Slurm job using the profiling helper
-- `scripts/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
-- `scripts/summarize_rocprofv3.py`: best-effort parser that generates deep-trace summaries and manifests
-- `scripts/summarize_rocprofsys.py`: best-effort parser that generates deep-system summaries and manifests
-- `scripts/analyze_summary.py`: rule-based analyzer that generates `analysis.json`
-- `scripts/generate_report.py`: report generator that emits `report.md` and `report.html`
+- `src/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
+- `src/summarize_rocprofv3.py`: best-effort parser that generates deep-trace summaries and manifests
+- `src/summarize_rocprofsys.py`: best-effort parser that generates deep-system summaries and manifests
+- `src/analyze_summary.py`: rule-based analyzer that generates `analysis.json`
+- `src/generate_report.py`: report generator that emits `report.md` and `report.html`
 - `examples/demo_pytorch_rocm.py`: a PyTorch ROCm demo workload to generate GPU activity
 - `docs/implementation_plan.md`: system-level plan for a full feedback loop
 
@@ -36,7 +36,7 @@ cd lumi-job-profiler
 2. In your existing `sbatch` script, add the hook after your module loads:
 
 ```bash
-source /scratch/<project_id>/$USER/lumi-job-profiler/bin/profile_hook.sh
+source /scratch/<project_id>/$USER/lumi-job-profiler/scripts/profile_hook.sh
 ```
 
 For containerized PyTorch jobs, also export the container image before `profile_run`:
@@ -82,7 +82,7 @@ If you want a complete working example, use `examples/sbatch_profiled.sh`.
 If your job has multiple phases and you only want to profile part of it, use the lifecycle functions directly:
 
 ```bash
-source /scratch/<project_id>/$USER/lumi-job-profiler/bin/profile_hook.sh
+source /scratch/<project_id>/$USER/lumi-job-profiler/scripts/profile_hook.sh
 trap profile_cleanup EXIT
 
 export LUMI_CONTAINER_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif
@@ -110,10 +110,10 @@ Deep-trace note:
 
 - `LUMI_PROFILE_MODE=deep-trace` currently applies to the wrapped `profile_run -- <command>` path
 - deep-trace is supported for container launches configured with `LUMI_CONTAINER_IMAGE`
-- when the wrapped command starts with `srun`, the hook injects `singularity exec ... rocprofv3` inside the `srun` step so tracing attaches to the Slurm task instead of the `srun` launcher
-- `LUMI_PROFILE_MODE=deep-system` runs `rocprofiler-systems` inside the container and writes perfetto-style system traces
+- `LUMI_PROFILE_MODE=deep-system` runs `rocprofiler-systems` inside the container and writes Perfetto-style system traces
 - host-side deep profiling with the retiring `pytorch/2.7` module stack is treated as unsupported
 - manual lifecycle control still manages the lightweight `rocm-smi` sidecar
+- host-side deep profiling with the retiring `pytorch/2.7` module stack is treated as unsupported
 
 ## Controls
 
@@ -308,15 +308,15 @@ The parser is best‑effort and tolerant of missing fields.
 Helper scripts:
 
 - Build the tool:
-  - `bin/build_rocprofiler_systems_container.sh`
+  - `supplemental/rocprofiler-systems/build_rocprofiler_systems_container.sh`
 - Smoke-test the install against a minimal PyTorch ROCm workload:
-  - `bin/smoke_test_rocprofiler_systems_container.sh`
+  - `supplemental/rocprofiler-systems/smoke_test_rocprofiler_systems_container.sh`
 
 Run the build from a login node:
 
 ```bash
 REPO_DIR=/scratch/<project_id>/$USER/lumi-job-profiler
-"${REPO_DIR}/bin/build_rocprofiler_systems_container.sh"
+"${REPO_DIR}/supplemental/rocprofiler-systems/build_rocprofiler_systems_container.sh"
 ```
 
 The build script:
@@ -340,7 +340,7 @@ Example:
 REPO_DIR=/scratch/<project_id>/$USER/lumi-job-profiler
 PROJECT_ID=<project_id> \
 INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
-"${REPO_DIR}/bin/build_rocprofiler_systems_container.sh"
+"${REPO_DIR}/supplemental/rocprofiler-systems/build_rocprofiler_systems_container.sh"
 ```
 
 Smoke-test the install:
@@ -348,7 +348,7 @@ Smoke-test the install:
 ```bash
 REPO_DIR=/scratch/<project_id>/$USER/lumi-job-profiler
 INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
-"${REPO_DIR}/bin/smoke_test_rocprofiler_systems_container.sh"
+"${REPO_DIR}/supplemental/rocprofiler-systems/smoke_test_rocprofiler_systems_container.sh"
 ```
 
 The smoke test verifies:

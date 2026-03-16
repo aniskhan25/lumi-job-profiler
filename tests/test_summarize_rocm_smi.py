@@ -9,7 +9,7 @@ from unittest import mock
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-MODULE_PATH = REPO_ROOT / "scripts" / "summarize_rocm_smi.py"
+MODULE_PATH = REPO_ROOT / "src" / "summarize_rocm_smi.py"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005028.log"
 CPU_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005029_cpu.log"
 

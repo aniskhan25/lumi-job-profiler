@@ -6,8 +6,8 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-ANALYZER_PATH = REPO_ROOT / "scripts" / "analyze_summary.py"
-SUMMARIZER_PATH = REPO_ROOT / "scripts" / "summarize_rocm_smi.py"
+ANALYZER_PATH = REPO_ROOT / "src" / "analyze_summary.py"
+SUMMARIZER_PATH = REPO_ROOT / "src" / "summarize_rocm_smi.py"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "nid005028.log"
 
 

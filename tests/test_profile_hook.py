@@ -7,7 +7,7 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "bin" / "profile_hook.sh"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "profile_hook.sh"
 
 
 class ProfileHookTests(unittest.TestCase):

@@ -6,7 +6,7 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "summarize_rocprofv3.py"
+SCRIPT_PATH = REPO_ROOT / "src" / "summarize_rocprofv3.py"
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "rocprofv3_trace" / "raw"
 
 

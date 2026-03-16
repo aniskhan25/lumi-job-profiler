@@ -5,7 +5,7 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "summarize_rocprofsys.py"
+SCRIPT_PATH = REPO_ROOT / "src" / "summarize_rocprofsys.py"
 
 
 def load_module(path, name):
