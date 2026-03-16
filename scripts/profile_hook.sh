@@ -54,6 +54,9 @@ PROFILE_SRUN_ARGS=()
 PROFILE_SRUN_PAYLOAD_ARGS=()
 PROFILE_DEEP_TRACE_TOOL_PATH=""
 
+. "${_profile_hook_dir}/lib/profile_container.sh"
+. "${_profile_hook_dir}/lib/profile_slurm.sh"
+
 profile_resolve_collect_command() {
   PROFILE_COLLECT_WARNING=""
 
@@ -91,33 +94,6 @@ profile_resolve_collect_command() {
   else
     PROFILE_COLLECT_COMMAND="${resolved_path} --showuse --showmemuse --showpower --showtemp --showclocks"
   fi
-}
-
-profile_container_enabled() {
-  [[ -n "${LUMI_CONTAINER_IMAGE}" ]]
-}
-
-profile_container_runtime_available() {
-  command -v "${LUMI_CONTAINER_RUNTIME}" >/dev/null 2>&1
-}
-
-profile_add_container_bind_spec() {
-  local spec="$1"
-  local existing=""
-
-  [[ -n "${spec}" ]] || return 0
-
-  for existing in "${PROFILE_CONTAINER_BIND_SPECS[@]}"; do
-    [[ "${existing}" == "${spec}" ]] && return 0
-  done
-
-  PROFILE_CONTAINER_BIND_SPECS+=("${spec}")
-}
-
-profile_add_container_bind_path() {
-  local path="$1"
-  [[ -n "${path}" ]] || return 0
-  profile_add_container_bind_spec "${path}:${path}"
 }
 
 profile_start() {
@@ -305,106 +281,6 @@ profile_build_rocprofv3_trace_args() {
   fi
 }
 
-profile_collect_container_bind_specs() {
-  PROFILE_CONTAINER_BIND_SPECS=()
-
-  profile_add_container_bind_path "${PROFILE_DIR}"
-  profile_add_container_bind_path "${DEEP_PROFILE_DIR}"
-  profile_add_container_bind_path "${DEEP_TRACE_DIR}"
-  profile_add_container_bind_path "${DEEP_TRACE_RAW_DIR}"
-  profile_add_container_bind_path "${DEEP_SYSTEM_DIR}"
-  profile_add_container_bind_path "${DEEP_SYSTEM_RAW_DIR}"
-  profile_add_container_bind_path "${LUMI_CONTAINER_WORKDIR}"
-  profile_add_container_bind_path "${ROCPROFSYS_INSTALL_PREFIX}"
-  profile_add_container_bind_path "${PWD}"
-  profile_add_container_bind_path "${SLURM_SUBMIT_DIR:-}"
-
-  if [[ "$#" -ge 1 ]]; then
-    if [[ "$1" == /* ]]; then
-      profile_add_container_bind_path "$(dirname "$1")"
-    fi
-
-    if [[ "$#" -ge 2 && "$2" == /* ]]; then
-      case "$(basename "$1")" in
-        python|python[0-9]*|bash|sh|env)
-          profile_add_container_bind_path "$(dirname "$2")"
-          ;;
-      esac
-    fi
-  fi
-
-  if [[ -n "${LUMI_CONTAINER_BIND_EXTRA}" ]]; then
-    local old_ifs="${IFS}"
-    local entry=""
-    IFS=','
-    for entry in ${LUMI_CONTAINER_BIND_EXTRA}; do
-      profile_add_container_bind_spec "${entry}"
-    done
-    IFS="${old_ifs}"
-  fi
-}
-
-profile_build_container_command() {
-  PROFILE_CONTAINER_CMD=()
-
-  if ! profile_container_enabled; then
-    return 1
-  fi
-
-  if [[ ! -e "${LUMI_CONTAINER_IMAGE}" ]]; then
-    echo "Configured container image does not exist: ${LUMI_CONTAINER_IMAGE}" >&2
-    return 2
-  fi
-
-  if ! profile_container_runtime_available; then
-    echo "Configured container runtime was not found in PATH: ${LUMI_CONTAINER_RUNTIME}" >&2
-    return 2
-  fi
-
-  mkdir -p "${PROFILE_DIR}" "${DEEP_PROFILE_DIR}" "${DEEP_TRACE_DIR}" "${DEEP_TRACE_RAW_DIR}" "${LUMI_CONTAINER_WORKDIR}"
-  profile_collect_container_bind_specs "$@"
-
-  local bind_arg=""
-  local spec=""
-  for spec in "${PROFILE_CONTAINER_BIND_SPECS[@]}"; do
-    if [[ -n "${bind_arg}" ]]; then
-      bind_arg+=",${spec}"
-    else
-      bind_arg="${spec}"
-    fi
-  done
-
-  PROFILE_CONTAINER_CMD=("${LUMI_CONTAINER_RUNTIME}" exec)
-  if [[ -n "${bind_arg}" ]]; then
-    PROFILE_CONTAINER_CMD+=(--bind "${bind_arg}")
-  fi
-  if [[ "${LUMI_CONTAINER_USE_ROCM}" == "1" ]]; then
-    PROFILE_CONTAINER_CMD+=(--rocm)
-  fi
-  PROFILE_CONTAINER_CMD+=(--pwd "${LUMI_CONTAINER_WORKDIR}" "${LUMI_CONTAINER_IMAGE}")
-}
-
-profile_is_python_launcher() {
-  local exe="$1"
-  local base
-  base="$(basename "${exe}")"
-  [[ "${base}" == python || "${base}" == python[0-9]* ]]
-}
-
-profile_payload_is_python_script() {
-  if [[ "$#" -lt 2 ]]; then
-    return 1
-  fi
-
-  profile_is_python_launcher "$1" && [[ "$2" != "-" && "$2" != -* ]]
-}
-
-profile_quote_args_for_shell() {
-  local quoted=""
-  printf -v quoted '%q ' "$@"
-  printf '%s' "${quoted% }"
-}
-
 profile_build_rocprofsys_container_command() {
   local -a payload=("$@")
   local prefix="${ROCPROFSYS_INSTALL_PREFIX}"
@@ -453,87 +329,6 @@ profile_build_rocprofsys_container_command() {
 
   PROFILE_DEEP_TRACE_TOOL_PATH="${LUMI_CONTAINER_RUNTIME} exec ${LUMI_CONTAINER_IMAGE} ${runner}"
   PROFILE_DEEP_TOOL_CMD=("${PROFILE_CONTAINER_CMD[@]}" bash -lc "${script}")
-}
-
-profile_srun_option_takes_value() {
-  case "$1" in
-    -A|--account|\
-    -c|--cpus-per-task|--cpus-per-gpu|\
-    -C|--constraint|\
-    -D|--chdir|\
-    -e|--error|\
-    -G|--gpus|--gpus-per-node|--gpus-per-task|\
-    -g|--gres|\
-    -i|--input|\
-    -J|--job-name|\
-    -m|--distribution|\
-    --mem|--mem-per-cpu|--mem-per-gpu|\
-    --mpi|\
-    -N|--nodes|\
-    -n|--ntasks|--ntasks-per-node|\
-    -o|--output|\
-    -p|--partition|\
-    -q|--qos|\
-    --reservation|\
-    -t|--time|\
-    --threads-per-core|\
-    -w|--nodelist|\
-    -x|--exclude|\
-    --cpu-bind|--gpu-bind|--hint|--export)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-profile_split_srun_command() {
-  PROFILE_SRUN_ARGS=()
-  PROFILE_SRUN_PAYLOAD_ARGS=()
-
-  if [[ "$#" -eq 0 || "$1" != "srun" ]]; then
-    return 1
-  fi
-
-  shift
-
-  local expecting_value=0
-  local token=""
-
-  while [[ "$#" -gt 0 ]]; do
-    token="$1"
-    shift
-
-    if [[ "${expecting_value}" == "1" ]]; then
-      PROFILE_SRUN_ARGS+=("${token}")
-      expecting_value=0
-      continue
-    fi
-
-    if [[ "${token}" == "--" ]]; then
-      PROFILE_SRUN_ARGS+=("${token}")
-      PROFILE_SRUN_PAYLOAD_ARGS=("$@")
-      return 0
-    fi
-
-    if [[ "${token}" != "-"* || "${token}" == "-" ]]; then
-      PROFILE_SRUN_PAYLOAD_ARGS=("${token}" "$@")
-      return 0
-    fi
-
-    PROFILE_SRUN_ARGS+=("${token}")
-
-    if [[ "${token}" == --*=* ]]; then
-      continue
-    fi
-
-    if profile_srun_option_takes_value "${token}"; then
-      expecting_value=1
-    fi
-  done
-
-  return 0
 }
 
 profile_run_command() {
