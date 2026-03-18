@@ -8,6 +8,8 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 - `examples/sbatch_profiled.sh`: example Slurm job using the profiling helper
 - `examples/sbatch_profiled_single_node_multigpu.sh`: example single-node multi-GPU job
 - `examples/sbatch_profiled_multinode_light.sh`: example multi-node distributed job in light mode
+- `examples/sbatch_profiled_multinode_deep_trace.sh`: example multi-node distributed deep-trace job
+- `examples/sbatch_profiled_multinode_deep_system.sh`: example multi-node distributed deep-system job
 - `src/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
 - `src/summarize_rocprofv3.py`: best-effort parser that generates deep-trace summaries and manifests
 - `src/summarize_rocprofsys.py`: best-effort parser that generates deep-system summaries and manifests
@@ -82,6 +84,8 @@ Available examples:
 - `examples/sbatch_profiled.sh`: single-GPU baseline example
 - `examples/sbatch_profiled_single_node_multigpu.sh`: single-node multi-GPU example for applications that use multiple GPUs from one wrapped process
 - `examples/sbatch_profiled_multinode_light.sh`: multi-node distributed example using light profiling with manual lifecycle control
+- `examples/sbatch_profiled_multinode_deep_trace.sh`: multi-node distributed deep-trace example using `profile_run_distributed`
+- `examples/sbatch_profiled_multinode_deep_system.sh`: multi-node distributed deep-system example using `profile_run_distributed`
 
 ## Manual Lifecycle Control
 
@@ -109,8 +113,10 @@ Available functions:
 - `profile_summarize`: write `summary.json`
 - `profile_cleanup`: run `profile_stop` and `profile_summarize` safely
 - `profile_run -- <command>`: convenience wrapper for single-command jobs
+- `profile_run_distributed -- srun [srun opts] -- <payload>`: convenience wrapper for distributed `srun` jobs
 
 `profile_run` supports direct commands only. Keep Slurm allocation details in the job script itself and pass the application launch directly to the hook.
+`profile_run_distributed` supports one explicit distributed form only: `srun [srun opts] -- <payload>`.
 
 Deep-trace note:
 
@@ -119,6 +125,7 @@ Deep-trace note:
 - `LUMI_PROFILE_MODE=deep-system` runs `rocprofiler-systems` inside the container and writes Perfetto-style system traces
 - host-side deep profiling with the older `pytorch/2.7` module stack is unsupported
 - manual lifecycle control still manages the lightweight `rocm-smi` sidecar
+- distributed deep profiling uses `profile_run_distributed -- srun ... -- <payload>`
 
 ## Controls
 
@@ -129,6 +136,7 @@ The helper is enabled by default. You can override behavior with:
 - `PROFILE_COLLECT_CPU=1` to collect optional host CPU, memory, and load metrics
 - `LUMI_PROFILE_MODE=deep-trace` to keep the lightweight profile and also run `rocprofv3` for `profile_run`
 - `LUMI_PROFILE_MODE=deep-system` to keep the lightweight profile and also run `rocprofiler-systems` for `profile_run`
+- `profile_run_distributed -- srun [srun opts] -- <payload>` for distributed launches under the same profiling modes
 - `LUMI_CONTAINER_IMAGE=/path/to/container.sif` to run the profiled payload inside a container
 - `LUMI_CONTAINER_BIND_EXTRA="/path/a:/path/a,/path/b:/path/b"` to add extra bind mounts for container runs
 - `ROCPROFV3_EXTRA_OPTS="..."` to append extra `rocprofv3` options in deep-trace mode
@@ -165,16 +173,17 @@ sbatch your_job.sh
 | Mode | Single GPU | Single-node multi-GPU | Multi-node distributed |
 | --- | --- | --- | --- |
 | `light` | Supported | Supported | Supported |
-| `deep-trace` | Supported | Supported when one wrapped process uses multiple GPUs on the node | Not supported as a first-class workflow |
-| `deep-system` | Supported | Supported when one wrapped process uses multiple GPUs on the node | Not supported as a first-class workflow |
+| `deep-trace` | Supported | Supported when one wrapped process uses multiple GPUs on the node | Supported with `profile_run_distributed -- srun ... -- <payload>` |
+| `deep-system` | Supported | Supported when one wrapped process uses multiple GPUs on the node | Supported with `profile_run_distributed -- srun ... -- <payload>` |
 
 Notes:
 
 - `light` mode launches a lightweight `rocm-smi` sidecar with `srun` and summarizes per-node logs, so it is the intended mode for multi-node jobs.
 - `deep-trace` and `deep-system` wrap one direct command inside the container. They work best for single-process jobs, including single-node multi-GPU jobs.
-- For distributed multi-node workloads, use `light` mode unless you are prepared to manage per-rank deep profiling outside the hook.
+- Distributed deep profiling uses one narrow supported interface: `profile_run_distributed -- srun [srun opts] -- <payload>`.
 - Use `examples/sbatch_profiled_single_node_multigpu.sh` for the single-node multi-GPU pattern.
 - Use `examples/sbatch_profiled_multinode_light.sh` for the multi-node distributed light-mode pattern.
+- Use `examples/sbatch_profiled_multinode_deep_trace.sh` or `examples/sbatch_profiled_multinode_deep_system.sh` for distributed deep profiling.
 
 ## Demo Workload
 

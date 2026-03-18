@@ -165,6 +165,21 @@ def summarize_trace_results_json(path):
     }
 
 
+def collect_distributed_layout(paths, raw_path):
+    node_dirs = set()
+    rank_dirs = set()
+    for path in paths:
+        try:
+            relative = path.relative_to(raw_path)
+        except ValueError:
+            continue
+        parts = relative.parts
+        if len(parts) >= 3 and parts[1].startswith("rank-"):
+            node_dirs.add(parts[0])
+            rank_dirs.add("/".join(parts[:2]))
+    return sorted(node_dirs), sorted(rank_dirs)
+
+
 def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
     raw_path = Path(raw_dir)
     artifacts = []
@@ -172,28 +187,80 @@ def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
     stats_summaries = {}
     warnings = []
     trace_results_summary = None
+    trace_results_summaries = []
+    node_dirs = []
+    rank_dirs = []
 
     if not raw_path.exists():
         warnings.append(f"Trace directory does not exist: {raw_path}")
     else:
-        for path in sorted(raw_path.iterdir()):
+        csv_trace_candidates = {}
+        csv_stats_candidates = {}
+        discovered_paths = []
+        for path in sorted(raw_path.rglob("*")):
             if path.is_dir():
                 continue
+            discovered_paths.append(path)
             artifacts.append(str(path))
             if path.name == "trace_results.json":
-                trace_results_summary = summarize_trace_results_json(path)
+                trace_results_summaries.append(summarize_trace_results_json(path))
                 continue
             if path.suffix.lower() != ".csv":
                 continue
             category, domain = classify_artifact(path)
             if category == "stats":
-                stats_summaries[domain] = summarize_stats_file(path)
+                csv_stats_candidates.setdefault(domain, []).append(summarize_stats_file(path))
             elif category == "trace":
-                trace_stats[domain] = summarize_trace_file(path)
+                csv_trace_candidates.setdefault(domain, []).append(summarize_trace_file(path))
+
+        for domain, file_summaries in csv_trace_candidates.items():
+            trace_stats[domain] = {
+                "file_count": len(file_summaries),
+                "row_count": sum(item["row_count"] for item in file_summaries),
+                "sample_paths": [item["path"] for item in file_summaries[:3]],
+            }
+
+        for domain, file_summaries in csv_stats_candidates.items():
+            top_candidates = []
+            for item in file_summaries:
+                top_candidates.extend(item["top"])
+            top_candidates = sorted(
+                top_candidates,
+                key=lambda row: (
+                    row.get("total_duration_ns") or -1,
+                    row.get("calls") or -1,
+                ),
+                reverse=True,
+            )[:TOP_N]
+            stats_summaries[domain] = {
+                "file_count": len(file_summaries),
+                "row_count": sum(item["row_count"] for item in file_summaries),
+                "sample_paths": [item["path"] for item in file_summaries[:3]],
+                "top": top_candidates,
+            }
+
+        node_dirs, rank_dirs = collect_distributed_layout(discovered_paths, raw_path)
 
     runtime_record_counts = {}
-    if trace_results_summary:
-        runtime_record_counts = trace_results_summary.get("buffer_record_counts", {})
+    if trace_results_summaries:
+        runtime_record_counts = {key: 0 for key in RUNTIME_BUFFER_KEYS}
+        summary_entry_count = 0
+        for item in trace_results_summaries:
+            counts = item.get("buffer_record_counts", {})
+            for key in RUNTIME_BUFFER_KEYS:
+                value = counts.get(key)
+                if value is None:
+                    runtime_record_counts[key] = None
+                elif runtime_record_counts.get(key) is not None:
+                    runtime_record_counts[key] += value
+            if item.get("summary_entry_count") is not None:
+                summary_entry_count += item["summary_entry_count"]
+        trace_results_summary = {
+            "file_count": len(trace_results_summaries),
+            "sample_paths": [item["path"] for item in trace_results_summaries[:3]],
+            "buffer_record_counts": runtime_record_counts,
+            "summary_entry_count": summary_entry_count,
+        }
 
     effective_hip_api_rows = trace_stats.get("hip_api", {}).get("row_count")
     effective_kernel_dispatch_rows = trace_stats.get("kernel_dispatch", {}).get("row_count")
@@ -215,6 +282,10 @@ def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
         "top_kernel_dispatches": stats_summaries.get("kernel_dispatch", {}).get("top", []),
         "top_memory_copies": stats_summaries.get("memory_copy", {}).get("top", []),
         "runtime_record_counts": runtime_record_counts,
+        "distributed_node_count": len(node_dirs),
+        "distributed_rank_count": len(rank_dirs),
+        "distributed_node_sample": node_dirs[:3],
+        "distributed_rank_sample": rank_dirs[:3],
     }
 
     if not artifacts:

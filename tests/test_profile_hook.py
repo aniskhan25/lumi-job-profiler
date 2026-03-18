@@ -388,6 +388,155 @@ class ProfileHookTests(unittest.TestCase):
             self.assertIn(str(fake_app), rocprofsys_args)
             self.assertEqual(app_args, ["alpha", "beta"])
 
+    def test_profile_run_distributed_requires_explicit_separator(self):
+        command = textwrap.dedent(
+            f"""
+            source "{SCRIPT_PATH}"
+            profile_run_distributed srun python3 app.py
+            """
+        )
+
+        result = self.run_bash(command)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("explicit '--' separator", result.stderr)
+
+    def test_profile_run_distributed_injects_rank_local_rocprofv3(self):
+        with tempfile.TemporaryDirectory(prefix="lumi-profiler-hook-") as tmpdir:
+            tmp_path = pathlib.Path(tmpdir)
+            raw_dir = tmp_path / "trace_raw"
+            raw_dir.mkdir()
+            workdir = tmp_path / "workdir"
+            workdir.mkdir()
+            container_image = tmp_path / "container.sif"
+            container_image.write_text("", encoding="utf-8")
+
+            srun_log = tmp_path / "srun.args"
+            singularity_log = tmp_path / "singularity.args"
+            rocprof_log = tmp_path / "rocprof.args"
+            app_log = tmp_path / "app.args"
+
+            fake_srun = tmp_path / "srun"
+            fake_srun.write_text(
+                textwrap.dedent(
+                    f"""\
+                    #!/bin/sh
+                    printf '%s\\n' "$@" > "{srun_log}"
+                    while [ "$#" -gt 0 ]; do
+                      case "$1" in
+                        --ntasks=*|--nodes=*|--cpu-bind=*)
+                          shift
+                          ;;
+                        --ntasks|--nodes|--cpu-bind)
+                          shift
+                          shift
+                          ;;
+                        *)
+                          break
+                          ;;
+                      esac
+                    done
+                    export SLURM_PROCID=3
+                    export SLURM_LOCALID=1
+                    exec "$@"
+                    """
+                )
+            )
+            fake_srun.chmod(0o755)
+
+            fake_singularity = tmp_path / "singularity"
+            fake_singularity.write_text(
+                textwrap.dedent(
+                    f"""\
+                    #!/bin/sh
+                    printf '%s\\n' "$@" > "{singularity_log}"
+                    while [ "$#" -gt 0 ]; do
+                      case "$1" in
+                        exec)
+                          shift
+                          ;;
+                        --bind|--pwd)
+                          shift
+                          shift
+                          ;;
+                        --rocm)
+                          shift
+                          ;;
+                        *.sif)
+                          shift
+                          break
+                          ;;
+                        *)
+                          shift
+                          ;;
+                      esac
+                    done
+                    exec "$@"
+                    """
+                )
+            )
+            fake_singularity.chmod(0o755)
+
+            fake_rocprof = tmp_path / "rocprofv3"
+            fake_rocprof.write_text(
+                textwrap.dedent(
+                    f"""\
+                    #!/bin/sh
+                    printf '%s\\n' "$@" > "{rocprof_log}"
+                    while [ "$#" -gt 0 ]; do
+                      if [ "$1" = "--" ]; then
+                        shift
+                        break
+                      fi
+                      shift
+                    done
+                    exec "$@"
+                    """
+                )
+            )
+            fake_rocprof.chmod(0o755)
+
+            fake_app = tmp_path / "app.sh"
+            fake_app.write_text(
+                textwrap.dedent(
+                    f"""\
+                    #!/bin/sh
+                    printf '%s\\n' "$@" > "{app_log}"
+                    exit 0
+                    """
+                )
+            )
+            fake_app.chmod(0o755)
+
+            command = textwrap.dedent(
+                f"""
+                PROFILE_DIR="{tmp_path}/profile"
+                DEEP_PROFILE_DIR="{tmp_path}/profile/deep_profile"
+                source "{SCRIPT_PATH}"
+                profile_finalize_deep_profile() {{ :; }}
+                PROFILE_MODE=deep-trace
+                DEEP_TRACE_RAW_DIR="{raw_dir}"
+                PATH="{tmp_path}:$PATH"
+                LUMI_CONTAINER_IMAGE="{container_image}"
+                LUMI_CONTAINER_WORKDIR="{workdir}"
+                profile_run_distributed_command srun --ntasks=2 --cpu-bind=none -- "{fake_app}" alpha beta
+                """
+            )
+
+            result = self.run_bash(command)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+            srun_args = srun_log.read_text().splitlines()
+            singularity_args = singularity_log.read_text().splitlines()
+            rocprof_args = rocprof_log.read_text().splitlines()
+            app_args = app_log.read_text().splitlines()
+
+            self.assertIn("--ntasks=2", srun_args)
+            self.assertEqual(singularity_args[0], "exec")
+            self.assertIn("bash", singularity_args)
+            self.assertIn("--runtime-trace", rocprof_args)
+            self.assertIn(str(fake_app), rocprof_args)
+            self.assertEqual(app_args, ["alpha", "beta"])
+
 
 if __name__ == "__main__":
     unittest.main()

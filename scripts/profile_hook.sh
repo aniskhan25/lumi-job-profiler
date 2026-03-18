@@ -47,6 +47,7 @@ PROFILE_CONTAINER_CMD=()
 PROFILE_DEEP_TRACE_TOOL_PATH=""
 
 . "${_profile_repo_dir}/scripts/lib/profile_container.sh"
+. "${_profile_repo_dir}/scripts/lib/profile_distributed.sh"
 . "${_profile_repo_dir}/scripts/lib/profile_deep_trace.sh"
 . "${_profile_repo_dir}/scripts/lib/profile_deep_system.sh"
 
@@ -269,6 +270,96 @@ profile_run_command() {
   return "${status}"
 }
 
+profile_run_distributed_command() {
+  local -a original_command=("$@")
+  local -a srun_command=(srun)
+  local -a payload=()
+  local -a container_cmd=()
+  local -a distributed_cmd=()
+  local deep_profile_enabled=0
+  local status=0
+
+  PROFILE_DEEP_TRACE_TOOL_PATH=""
+
+  profile_split_distributed_command "${original_command[@]}" || return $?
+  payload=("${PROFILE_DISTRIBUTED_PAYLOAD[@]}")
+  srun_command+=("${PROFILE_DISTRIBUTED_SRUN_ARGS[@]}")
+
+  if [[ "${PROFILE_MODE}" == "deep-trace" || "${PROFILE_MODE}" == "deep-system" ]]; then
+    deep_profile_enabled=1
+  fi
+
+  if profile_container_enabled; then
+    local container_build_status=0
+    profile_build_container_command "${payload[@]}" || container_build_status=$?
+    if [[ "${container_build_status}" != "0" ]]; then
+      return "${container_build_status}"
+    fi
+    container_cmd=("${PROFILE_CONTAINER_CMD[@]}")
+  fi
+
+  if [[ "${deep_profile_enabled}" == "1" ]]; then
+    if ! profile_container_enabled; then
+      echo "Distributed deep profiling is supported only for container launches. Set LUMI_CONTAINER_IMAGE to a supported PyTorch container; running without deep profile artifacts." >&2
+      "${srun_command[@]}" -- "${payload[@]}"
+      status=$?
+      profile_finalize_deep_profile "${status}" "fallback_unsupported_host_deep_profile" "${original_command[@]}"
+      return "${status}"
+    fi
+
+    if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
+      local -a rocprof_extra_opts=()
+      local extra_opt=""
+      if [[ -n "${ROCPROFV3_EXTRA_OPTS}" ]]; then
+        read -r -a rocprof_extra_opts <<< "${ROCPROFV3_EXTRA_OPTS}"
+      fi
+
+      local script=""
+      script+="set -euo pipefail"$'\n'
+      script+='host=$(hostname)'$'\n'
+      script+='rank=${SLURM_PROCID:-0}'$'\n'
+      script+="rank_dir=$(printf '%q' \"${DEEP_TRACE_RAW_DIR}\")/\${host}/rank-\${rank}"$'\n'
+      script+='mkdir -p "${rank_dir}"'$'\n'
+      script+='rocprof_cmd=('
+      script+="$(printf '%q ' "${LUMI_CONTAINER_ROCPROFV3}" --runtime-trace --stats --output-format csv json --output-directory)"
+      script+='"${rank_dir}" '
+      script+="$(printf '%q ' --output-file trace)"
+      for extra_opt in "${rocprof_extra_opts[@]}"; do
+        script+="$(printf '%q ' "${extra_opt}")"
+      done
+      script+="-- "
+      script+="$(profile_quote_args_for_shell "${payload[@]}")"
+      script+=')'$'\n'
+      script+='"${rocprof_cmd[@]}"'$'\n'
+
+      PROFILE_DEEP_TRACE_TOOL_PATH="singularity exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
+      distributed_cmd=("${srun_command[@]}" "${container_cmd[@]}" bash -lc "${script}")
+    else
+      profile_build_rocprofsys_container_command --distributed "${payload[@]}" || return $?
+      distributed_cmd=("${srun_command[@]}" "${PROFILE_DEEP_TOOL_CMD[@]}")
+    fi
+  else
+    if profile_container_enabled; then
+      distributed_cmd=("${srun_command[@]}" "${container_cmd[@]}" "${payload[@]}")
+    else
+      distributed_cmd=("${srun_command[@]}" -- "${payload[@]}")
+    fi
+  fi
+
+  "${distributed_cmd[@]}"
+  status=$?
+
+  if [[ "${deep_profile_enabled}" == "1" ]]; then
+    if [[ "${status}" == "0" ]]; then
+      profile_finalize_deep_profile "${status}" "completed" "${original_command[@]}"
+    else
+      profile_finalize_deep_profile "${status}" "completed_with_command_error" "${original_command[@]}"
+    fi
+  fi
+
+  return "${status}"
+}
+
 profile_run() {
   if [[ "$#" -gt 0 && "$1" == "--" ]]; then
     shift
@@ -282,6 +373,29 @@ profile_run() {
   profile_start
 
   if profile_run_command "$@"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  profile_stop
+  profile_summarize
+  return "${status}"
+}
+
+profile_run_distributed() {
+  if [[ "$#" -gt 0 && "$1" == "--" ]]; then
+    shift
+  fi
+
+  if [[ "$#" -eq 0 ]]; then
+    echo "profile_run_distributed requires an srun command" >&2
+    return 2
+  fi
+
+  profile_start
+
+  if profile_run_distributed_command "$@"; then
     status=0
   else
     status=$?

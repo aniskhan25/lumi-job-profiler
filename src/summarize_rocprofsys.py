@@ -17,6 +17,21 @@ from deep_profile_common import iso_timestamp, write_json
 SYSTEM_SCHEMA_VERSION = 1
 
 
+def collect_distributed_layout(paths, raw_path):
+    node_dirs = set()
+    rank_dirs = set()
+    for path in paths:
+        try:
+            relative = path.relative_to(raw_path)
+        except ValueError:
+            continue
+        parts = relative.parts
+        if len(parts) >= 3 and parts[1].startswith("rank-"):
+            node_dirs.add(parts[0])
+            rank_dirs.add("/".join(parts[:2]))
+    return sorted(node_dirs), sorted(rank_dirs)
+
+
 def build_system_summary(raw_dir, tool_path, mode, command, status, exit_code):
     raw_path = Path(raw_dir)
     artifacts = []
@@ -24,6 +39,9 @@ def build_system_summary(raw_dir, tool_path, mode, command, status, exit_code):
     perfetto_files = []
     metadata_files = []
     functions_files = []
+    discovered_paths = []
+    node_dirs = []
+    rank_dirs = []
 
     if not raw_path.exists():
         warnings.append(f"System profile directory does not exist: {raw_path}")
@@ -31,6 +49,7 @@ def build_system_summary(raw_dir, tool_path, mode, command, status, exit_code):
         for path in sorted(raw_path.rglob("*")):
             if path.is_dir():
                 continue
+            discovered_paths.append(path)
             artifacts.append(str(path))
             if path.name.startswith("perfetto-trace-") and path.suffix == ".proto":
                 perfetto_files.append(str(path))
@@ -38,6 +57,7 @@ def build_system_summary(raw_dir, tool_path, mode, command, status, exit_code):
                 metadata_files.append(str(path))
             elif path.name.startswith("functions-") and path.suffix == ".json":
                 functions_files.append(str(path))
+        node_dirs, rank_dirs = collect_distributed_layout(discovered_paths, raw_path)
 
     preview = {
         "perfetto_trace_files": len(perfetto_files),
@@ -46,6 +66,10 @@ def build_system_summary(raw_dir, tool_path, mode, command, status, exit_code):
         "perfetto_trace_sample": perfetto_files[:3],
         "metadata_sample": metadata_files[:3],
         "functions_sample": functions_files[:3],
+        "distributed_node_count": len(node_dirs),
+        "distributed_rank_count": len(rank_dirs),
+        "distributed_node_sample": node_dirs[:3],
+        "distributed_rank_sample": rank_dirs[:3],
     }
 
     if not artifacts:

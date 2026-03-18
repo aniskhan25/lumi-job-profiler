@@ -124,6 +124,47 @@ class SummarizeRocprofv3Tests(unittest.TestCase):
         self.assertEqual(summary["preview"]["kernel_dispatch_trace_rows"], 1)
         self.assertEqual(summary["trace_stats"]["kernel_dispatch"]["row_count"], 1)
 
+    def test_distributed_trace_summary_aggregates_nested_rank_outputs(self):
+        with tempfile.TemporaryDirectory(prefix="lumi-profiler-rocprof-dist-") as tmpdir:
+            raw_dir = pathlib.Path(tmpdir)
+            rank0 = raw_dir / "nid000001" / "rank-0"
+            rank1 = raw_dir / "nid000002" / "rank-1"
+            rank0.mkdir(parents=True)
+            rank1.mkdir(parents=True)
+            (rank0 / "trace_hip_api_trace.csv").write_text(
+                "StartNs,EndNs,Function\n0,1000,hipLaunchKernel\n",
+                encoding="utf-8",
+            )
+            (rank1 / "trace_hip_api_trace.csv").write_text(
+                "StartNs,EndNs,Function\n0,1000,hipMemcpyAsync\n",
+                encoding="utf-8",
+            )
+            (rank0 / "trace_results.json").write_text(
+                json.dumps(
+                    {"rocprofiler-sdk-tool": [{"buffer_records": {"hip_api": [{}]}, "summary": []}]}
+                ),
+                encoding="utf-8",
+            )
+            (rank1 / "trace_results.json").write_text(
+                json.dumps(
+                    {"rocprofiler-sdk-tool": [{"buffer_records": {"hip_api": [{}]}, "summary": []}]}
+                ),
+                encoding="utf-8",
+            )
+
+            summary = self.module.build_trace_summary(
+                raw_dir=raw_dir,
+                tool_path="/usr/bin/rocprofv3",
+                mode="deep-trace",
+                command="srun --ntasks=2 -- python3 demo.py",
+                status="completed",
+                exit_code=0,
+            )
+
+        self.assertEqual(summary["preview"]["hip_api_trace_rows"], 2)
+        self.assertEqual(summary["preview"]["distributed_node_count"], 2)
+        self.assertEqual(summary["preview"]["distributed_rank_count"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

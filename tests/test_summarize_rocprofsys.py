@@ -60,6 +60,29 @@ class SummarizeRocprofSysTests(unittest.TestCase):
         self.assertEqual(summary["status"], "completed_without_perfetto_trace")
         self.assertIn("did not produce a perfetto trace", summary["warnings"][0])
 
+    def test_system_summary_aggregates_nested_rank_outputs(self):
+        with tempfile.TemporaryDirectory(prefix="lumi-profiler-rocpd-dist-") as tmpdir:
+            raw_dir = pathlib.Path(tmpdir)
+            rank0 = raw_dir / "nid000001" / "rank-0" / "rocprofsys-python-output" / "2026-03-16_00.04"
+            rank1 = raw_dir / "nid000002" / "rank-1" / "rocprofsys-python-output" / "2026-03-16_00.04"
+            rank0.mkdir(parents=True)
+            rank1.mkdir(parents=True)
+            (rank0 / "perfetto-trace-1.proto").write_text("perfetto", encoding="utf-8")
+            (rank1 / "perfetto-trace-2.proto").write_text("perfetto", encoding="utf-8")
+
+            summary = self.module.build_system_summary(
+                raw_dir=raw_dir,
+                tool_path="/tmp/rocprof-sys-python",
+                mode="deep-system",
+                command="srun --ntasks=2 -- python3 demo.py",
+                status="completed",
+                exit_code=0,
+            )
+
+        self.assertEqual(summary["preview"]["perfetto_trace_files"], 2)
+        self.assertEqual(summary["preview"]["distributed_node_count"], 2)
+        self.assertEqual(summary["preview"]["distributed_rank_count"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
