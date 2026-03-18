@@ -6,6 +6,8 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 
 - `scripts/profile_hook.sh`: shell helper for minimal opt-in profiling in existing jobs
 - `examples/sbatch_profiled.sh`: example Slurm job using the profiling helper
+- `examples/sbatch_profiled_single_node_multigpu.sh`: example single-node multi-GPU job
+- `examples/sbatch_profiled_multinode_light.sh`: example multi-node distributed job in light mode
 - `src/summarize_rocm_smi.py`: best-effort parser that generates `summary.json`
 - `src/summarize_rocprofv3.py`: best-effort parser that generates deep-trace summaries and manifests
 - `src/summarize_rocprofsys.py`: best-effort parser that generates deep-system summaries and manifests
@@ -73,9 +75,13 @@ sbatch your_job.sh
       raw/
 ```
 
-## Example Template
+## Example Templates
 
-If you want a complete working example, use `examples/sbatch_profiled.sh`.
+Available examples:
+
+- `examples/sbatch_profiled.sh`: single-GPU baseline example
+- `examples/sbatch_profiled_single_node_multigpu.sh`: single-node multi-GPU example for applications that use multiple GPUs from one wrapped process
+- `examples/sbatch_profiled_multinode_light.sh`: multi-node distributed example using light profiling with manual lifecycle control
 
 ## Manual Lifecycle Control
 
@@ -153,6 +159,22 @@ LUMI_CONTAINER_IMAGE=/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t2
 ROCPROFSYS_INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
 sbatch your_job.sh
 ```
+
+## Support Matrix
+
+| Mode | Single GPU | Single-node multi-GPU | Multi-node distributed |
+| --- | --- | --- | --- |
+| `light` | Supported | Supported | Supported |
+| `deep-trace` | Supported | Supported when one wrapped process uses multiple GPUs on the node | Not supported as a first-class workflow |
+| `deep-system` | Supported | Supported when one wrapped process uses multiple GPUs on the node | Not supported as a first-class workflow |
+
+Notes:
+
+- `light` mode launches a lightweight `rocm-smi` sidecar with `srun` and summarizes per-node logs, so it is the intended mode for multi-node jobs.
+- `deep-trace` and `deep-system` wrap one direct command inside the container. They work best for single-process jobs, including single-node multi-GPU jobs.
+- For distributed multi-node workloads, use `light` mode unless you are prepared to manage per-rank deep profiling outside the hook.
+- Use `examples/sbatch_profiled_single_node_multigpu.sh` for the single-node multi-GPU pattern.
+- Use `examples/sbatch_profiled_multinode_light.sh` for the multi-node distributed light-mode pattern.
 
 ## Demo Workload
 
