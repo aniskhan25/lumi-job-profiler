@@ -15,7 +15,8 @@ This repo contains a **user opt-in** profiling demo for LUMI GPU jobs (AMD/ROCm)
 - `src/summarize_rocprofsys.py`: best-effort parser that generates deep-system summaries and manifests
 - `src/analyze_summary.py`: rule-based analyzer that generates `analysis.json`
 - `src/generate_report.py`: report generator that emits `report.md` and `report.html`
-- `examples/demo_pytorch_rocm.py`: a PyTorch ROCm demo workload to generate GPU activity
+- `examples/demo_pytorch_rocm.py`: a single-process PyTorch ROCm demo workload
+- `examples/demo_pytorch_distributed_rocm.py`: a distributed PyTorch ROCm demo workload for multi-node examples
 - `docs/implementation_plan.md`: system-level plan for a full feedback loop
 
 ## Requirements
@@ -206,6 +207,12 @@ The example template runs a PyTorch ROCm workload when available:
 
 ```
 examples/demo_pytorch_rocm.py --seconds 60 --size 4096 --dtype fp16
+```
+
+Distributed examples use:
+
+```
+examples/demo_pytorch_distributed_rocm.py --seconds 60 --size 2048 --dtype fp16
 ```
 
 If the demo script is missing, the template falls back to `./your_application`.

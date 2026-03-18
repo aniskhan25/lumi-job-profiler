@@ -19,8 +19,8 @@ export LUMI_CONTAINER_IMAGE="${LUMI_CONTAINER_IMAGE:-${CONTAINER_IMAGE_DEFAULT}}
 export LUMI_PROFILE_MODE=deep-trace
 source "${REPO_DIR}/scripts/profile_hook.sh"
 
-APP_SCRIPT="${APP_SCRIPT:-${REPO_DIR}/your_distributed_app.py}"
+APP_SCRIPT="${APP_SCRIPT:-${REPO_DIR}/examples/demo_pytorch_distributed_rocm.py}"
 
 profile_run_distributed -- \
   srun --nodes=2 --ntasks-per-node=8 --cpu-bind=none -- \
-  python3 "${APP_SCRIPT}" --config your_config.yaml
+  python3 "${APP_SCRIPT}" --seconds 60 --size 2048 --dtype fp16
