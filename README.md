@@ -168,6 +168,21 @@ ROCPROFSYS_INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-
 sbatch your_job.sh
 ```
 
+Distributed deep-trace example:
+
+```bash
+LUMI_PROFILE_MODE=deep-trace \
+sbatch /scratch/<project_id>/$USER/lumi-job-profiler/examples/sbatch_profiled_multinode_deep_trace.sh
+```
+
+Distributed deep-system example:
+
+```bash
+LUMI_PROFILE_MODE=deep-system \
+ROCPROFSYS_INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-container \
+sbatch /scratch/<project_id>/$USER/lumi-job-profiler/examples/sbatch_profiled_multinode_deep_system.sh
+```
+
 ## Support Matrix
 
 | Mode | Single GPU | Single-node multi-GPU | Multi-node distributed |
