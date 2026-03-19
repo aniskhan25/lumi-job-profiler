@@ -185,6 +185,8 @@ class ProfileHookTests(unittest.TestCase):
 
             command = textwrap.dedent(
                 f"""
+                PROFILE_DIR="{tmp_path}/profile"
+                DEEP_PROFILE_DIR="{tmp_path}/profile/deep_profile"
                 source "{SCRIPT_PATH}"
                 profile_finalize_deep_profile() {{ :; }}
                 PROFILE_MODE=deep-trace
@@ -206,8 +208,11 @@ class ProfileHookTests(unittest.TestCase):
             self.assertEqual(singularity_args[0], "exec")
             self.assertIn("--bind", singularity_args)
             self.assertIn(str(container_image), singularity_args)
-            self.assertIn("rocprofv3", singularity_args)
-            self.assertIn("--runtime-trace", rocprof_args)
+            self.assertIn("rocprofv3", " ".join(singularity_args))
+            self.assertIn("--hip-trace", rocprof_args)
+            self.assertIn("--kernel-trace", rocprof_args)
+            self.assertIn("--memory-copy-trace", rocprof_args)
+            self.assertIn("--scratch-memory-trace", rocprof_args)
             self.assertIn("--stats", rocprof_args)
             self.assertIn(str(raw_dir), rocprof_args)
             self.assertEqual(rocprof_args[-4:], ["--", str(fake_app), "alpha", "beta"])
@@ -533,7 +538,10 @@ class ProfileHookTests(unittest.TestCase):
             self.assertIn("--ntasks=2", srun_args)
             self.assertEqual(singularity_args[0], "exec")
             self.assertIn("bash", singularity_args)
-            self.assertIn("--runtime-trace", rocprof_args)
+            self.assertIn("--hip-trace", rocprof_args)
+            self.assertIn("--kernel-trace", rocprof_args)
+            self.assertIn("--memory-copy-trace", rocprof_args)
+            self.assertIn("--scratch-memory-trace", rocprof_args)
             self.assertIn(str(fake_app), rocprof_args)
             self.assertEqual(app_args, ["alpha", "beta"])
 

@@ -232,10 +232,17 @@ profile_run_command() {
     if [[ "${deep_profile_enabled}" == "1" ]]; then
       if [[ "${PROFILE_MODE}" == "deep-trace" ]]; then
         PROFILE_DEEP_TRACE_TOOL_PATH="singularity exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
-        local -a container_rocprof_cmd=("${PROFILE_CONTAINER_CMD[@]}")
         profile_build_rocprofv3_trace_args
-        container_rocprof_cmd+=("${PROFILE_ROCPROFV3_TRACE_ARGS[@]}")
-        container_rocprof_cmd+=(-- "$@")
+        local script=""
+        script+="set -euo pipefail"$'\n'
+        script+="mkdir -p $(printf '%q' "${DEEP_TRACE_RAW_DIR}")"$'\n'
+        script+='rocprof_cmd=('
+        script+="$(profile_quote_args_for_shell "${PROFILE_ROCPROFV3_TRACE_ARGS[@]}")"
+        script+=" -- "
+        script+="$(profile_quote_args_for_shell "$@")"
+        script+=')'$'\n'
+        script+='"${rocprof_cmd[@]}" > '"$(printf '%q' "${DEEP_TRACE_RAW_DIR}/rocprof.stdout.txt")"' 2> '"$(printf '%q' "${DEEP_TRACE_RAW_DIR}/rocprof.stderr.txt")"$'\n'
+        local -a container_rocprof_cmd=("${PROFILE_CONTAINER_CMD[@]}" bash -lc "${script}")
         "${container_rocprof_cmd[@]}"
       else
         profile_build_rocprofsys_container_command "$@" || return $?
@@ -321,7 +328,7 @@ profile_run_distributed_command() {
       script+="rank_dir=$(printf '%q' \"${DEEP_TRACE_RAW_DIR}\")/\${host}/rank-\${rank}"$'\n'
       script+='mkdir -p "${rank_dir}"'$'\n'
       script+='rocprof_cmd=('
-      script+="$(printf '%q ' "${LUMI_CONTAINER_ROCPROFV3}" --runtime-trace --stats --output-format csv json --output-directory)"
+      script+="$(printf '%q ' "${LUMI_CONTAINER_ROCPROFV3}" --hip-trace --kernel-trace --memory-copy-trace --scratch-memory-trace --stats --output-format csv json --output-directory)"
       script+='"${rank_dir}" '
       script+="$(printf '%q ' --output-file trace)"
       for extra_opt in "${rocprof_extra_opts[@]}"; do
@@ -330,7 +337,7 @@ profile_run_distributed_command() {
       script+="-- "
       script+="$(profile_quote_args_for_shell "${payload[@]}")"
       script+=')'$'\n'
-      script+='"${rocprof_cmd[@]}"'$'\n'
+      script+='"${rocprof_cmd[@]}" > "${rank_dir}/rocprof.stdout.txt" 2> "${rank_dir}/rocprof.stderr.txt"'$'\n'
 
       PROFILE_DEEP_TRACE_TOOL_PATH="singularity exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
       distributed_cmd=("${srun_command[@]}" "${container_cmd[@]}" bash -lc "${script}")

@@ -3,7 +3,10 @@
 profile_build_rocprofv3_trace_args() {
   PROFILE_ROCPROFV3_TRACE_ARGS=(
     "${LUMI_CONTAINER_ROCPROFV3}"
-    --runtime-trace
+    --hip-trace
+    --kernel-trace
+    --memory-copy-trace
+    --scratch-memory-trace
     --stats
     --output-format
     csv
