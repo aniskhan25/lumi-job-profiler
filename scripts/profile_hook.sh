@@ -327,7 +327,7 @@ profile_run_distributed_command() {
       script+="set -euo pipefail"$'\n'
       script+='host=$(hostname)'$'\n'
       script+='rank=${SLURM_PROCID:-0}'$'\n'
-      script+="rank_dir=$(printf '%q' \"${DEEP_TRACE_RAW_DIR}\")/\${host}/rank-\${rank}"$'\n'
+      script+="rank_dir=$(printf '%q' "${DEEP_TRACE_RAW_DIR}")/\${host}/rank-\${rank}"$'\n'
       script+='mkdir -p "${rank_dir}"'$'\n'
       script+='rocprof_cmd=('
       script+="$(printf '%q ' "${LUMI_CONTAINER_ROCPROFV3}" --hip-trace --kernel-trace --memory-copy-trace --scratch-memory-trace --stats --output-format csv json --output-directory)"

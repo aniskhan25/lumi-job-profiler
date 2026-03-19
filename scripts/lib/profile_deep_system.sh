@@ -52,7 +52,7 @@ profile_build_rocprofsys_container_command() {
   if [[ "${distributed}" == "1" ]]; then
     script+='host=$(hostname)'$'\n'
     script+='rank=${SLURM_PROCID:-0}'$'\n'
-    script+="rank_dir=$(printf '%q' \"${DEEP_SYSTEM_RAW_DIR}\")/\${host}/rank-\${rank}"$'\n'
+    script+="rank_dir=$(printf '%q' "${DEEP_SYSTEM_RAW_DIR}")/\${host}/rank-\${rank}"$'\n'
     script+='mkdir -p "${rank_dir}"'$'\n'
     script+='cd "${rank_dir}"'$'\n'
     if [[ "${runner}" == "${LUMI_CONTAINER_ROCPROFSYS_RUN}" ]]; then
