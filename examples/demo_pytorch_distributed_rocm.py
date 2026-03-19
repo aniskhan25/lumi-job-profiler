@@ -41,6 +41,18 @@ def get_slurm_int(name, default=None):
     return int(value)
 
 
+def ensure_torch_distributed_env():
+    if "RANK" not in os.environ and "SLURM_PROCID" in os.environ:
+        os.environ["RANK"] = os.environ["SLURM_PROCID"]
+    if "WORLD_SIZE" not in os.environ and "SLURM_NTASKS" in os.environ:
+        os.environ["WORLD_SIZE"] = os.environ["SLURM_NTASKS"]
+    if "LOCAL_RANK" not in os.environ and "SLURM_LOCALID" in os.environ:
+        os.environ["LOCAL_RANK"] = os.environ["SLURM_LOCALID"]
+    os.environ.setdefault("MASTER_PORT", "29500")
+    if "MASTER_ADDR" not in os.environ and os.environ.get("SLURM_LAUNCH_NODE_IPADDR"):
+        os.environ["MASTER_ADDR"] = os.environ["SLURM_LAUNCH_NODE_IPADDR"]
+
+
 def main():
     args = parse_args()
 
@@ -53,6 +65,11 @@ def main():
 
     if not torch.cuda.is_available():
         print("torch.cuda.is_available() is False. ROCm/CUDA not available.")
+        sys.exit(1)
+
+    ensure_torch_distributed_env()
+    if "MASTER_ADDR" not in os.environ:
+        print("MASTER_ADDR is not set. Export MASTER_ADDR and MASTER_PORT before launching the distributed demo.")
         sys.exit(1)
 
     rank = get_slurm_int("SLURM_PROCID", 0)

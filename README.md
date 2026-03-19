@@ -184,6 +184,8 @@ ROCPROFSYS_INSTALL_PREFIX=/scratch/<project_id>/$USER/tools/rocprofiler-systems-
 sbatch /scratch/<project_id>/$USER/lumi-job-profiler/examples/sbatch_profiled_multinode_deep_system.sh
 ```
 
+The distributed example templates export `MASTER_ADDR` and `MASTER_PORT` from the Slurm allocation before launching `srun`.
+
 ## Support Matrix
 
 | Mode | Single GPU | Single-node multi-GPU | Multi-node distributed |

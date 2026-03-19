@@ -16,6 +16,8 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-${SLURM_SUBMIT_DIR}}"
 CONTAINER_IMAGE_DEFAULT="/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260225_144743/lumi-multitorch-full-u24r64f21m43t29-20260225_144743.sif"
 export LUMI_CONTAINER_IMAGE="${LUMI_CONTAINER_IMAGE:-${CONTAINER_IMAGE_DEFAULT}}"
+export MASTER_ADDR="${MASTER_ADDR:-$(scontrol show hostnames "${SLURM_JOB_NODELIST}" | head -n 1)}"
+export MASTER_PORT="${MASTER_PORT:-29500}"
 export LUMI_PROFILE_MODE=deep-trace
 source "${REPO_DIR}/scripts/profile_hook.sh"
 
