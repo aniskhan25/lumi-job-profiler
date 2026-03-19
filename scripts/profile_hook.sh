@@ -306,6 +306,8 @@ profile_run_distributed_command() {
   fi
 
   if [[ "${deep_profile_enabled}" == "1" ]]; then
+    mkdir -p "${DEEP_TRACE_RAW_DIR}" "${DEEP_SYSTEM_RAW_DIR}"
+
     if ! profile_container_enabled; then
       echo "Distributed deep profiling is supported only for container launches. Set LUMI_CONTAINER_IMAGE to a supported PyTorch container; running without deep profile artifacts." >&2
       "${srun_command[@]}" -- "${payload[@]}"
@@ -340,9 +342,13 @@ profile_run_distributed_command() {
       script+='"${rocprof_cmd[@]}" > "${rank_dir}/rocprof.stdout.txt" 2> "${rank_dir}/rocprof.stderr.txt"'$'\n'
 
       PROFILE_DEEP_TRACE_TOOL_PATH="singularity exec ${LUMI_CONTAINER_IMAGE} ${LUMI_CONTAINER_ROCPROFV3}"
+      printf '%s
+' "${script}" > "${DEEP_TRACE_RAW_DIR}/distributed-launch.sh"
       distributed_cmd=("${srun_command[@]}" "${container_cmd[@]}" bash -lc "${script}")
     else
       profile_build_rocprofsys_container_command --distributed "${payload[@]}" || return $?
+      printf '%s
+' "distributed deep-system launch via srun" > "${DEEP_SYSTEM_RAW_DIR}/distributed-launch.sh"
       distributed_cmd=("${srun_command[@]}" "${PROFILE_DEEP_TOOL_CMD[@]}")
     fi
   else
@@ -353,8 +359,16 @@ profile_run_distributed_command() {
     fi
   fi
 
-  "${distributed_cmd[@]}"
-  status=$?
+  if [[ "${deep_profile_enabled}" == "1" && "${PROFILE_MODE}" == "deep-trace" ]]; then
+    "${distributed_cmd[@]}" > "${DEEP_TRACE_RAW_DIR}/distributed-launch.stdout.txt" 2> "${DEEP_TRACE_RAW_DIR}/distributed-launch.stderr.txt"
+    status=$?
+  elif [[ "${deep_profile_enabled}" == "1" && "${PROFILE_MODE}" == "deep-system" ]]; then
+    "${distributed_cmd[@]}" > "${DEEP_SYSTEM_RAW_DIR}/distributed-launch.stdout.txt" 2> "${DEEP_SYSTEM_RAW_DIR}/distributed-launch.stderr.txt"
+    status=$?
+  else
+    "${distributed_cmd[@]}"
+    status=$?
+  fi
 
   if [[ "${deep_profile_enabled}" == "1" ]]; then
     if [[ "${status}" == "0" ]]; then
