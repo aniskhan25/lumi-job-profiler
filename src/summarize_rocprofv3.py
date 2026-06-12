@@ -48,13 +48,13 @@ def first_value(row, candidates):
 
 
 def read_csv_rows(path):
-    with open(path, "r", encoding="utf-8", newline="") as handle:
+    with open(path, "r", encoding="utf-8", errors="replace", newline="") as handle:
         reader = csv.DictReader(handle)
         return list(reader)
 
 
 def read_json(path):
-    with open(path, "r", encoding="utf-8") as handle:
+    with open(path, "r", encoding="utf-8", errors="replace") as handle:
         return json.load(handle)
 
 
