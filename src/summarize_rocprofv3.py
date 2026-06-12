@@ -299,11 +299,12 @@ def build_trace_summary(raw_dir, tool_path, mode, command, status, exit_code):
         "distributed_rank_sample": rank_dirs[:3],
     }
 
+    has_csv_events = any(info.get("row_count", 0) > 0 for info in trace_stats.values())
     if not artifacts:
         warnings.append("No rocprofv3 artifacts were discovered.")
     elif trace_results_summary and runtime_record_counts and not any(
         (value or 0) > 0 for value in runtime_record_counts.values() if value is not None
-    ):
+    ) and not has_csv_events:
         warnings.append(
             "rocprofv3 produced metadata artifacts but captured no runtime events. "
             "This usually indicates a runtime attachment or tool initialization failure on the target environment."
