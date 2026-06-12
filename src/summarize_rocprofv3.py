@@ -138,7 +138,18 @@ def summarize_trace_file(path):
     }
 
 
+MAX_TRACE_RESULTS_JSON_BYTES = 32 * 1024 * 1024  # 32 MB
+
+
 def summarize_trace_results_json(path):
+    if path.stat().st_size > MAX_TRACE_RESULTS_JSON_BYTES:
+        return {
+            "path": str(path),
+            "buffer_record_counts": {},
+            "summary_entry_count": None,
+            "skipped": True,
+            "reason": f"file too large to parse ({path.stat().st_size // (1024 * 1024)} MB)",
+        }
     payload = read_json(path)
     entries = payload.get("rocprofiler-sdk-tool", [])
     if not isinstance(entries, list) or not entries:
